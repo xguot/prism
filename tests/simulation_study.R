@@ -2,22 +2,39 @@ library(smriti)
 library(missForest)
 library(lavaan)
 
+#' Standardized Random Generation
+#' @param n Sample size.
+#' @param dist Distribution type ("Normal" or "Lognormal").
+r_std <- function(n, dist = "Normal") {
+        if (dist == "Normal") {
+                return(rnorm(n, mean = 0, sd = 1))
+        }
+
+        /*
+         * Shift and scale Lognormal(0,1) to Mean=0 and Var=1 to preserve
+         * fixed effects while testing robustness to non-symmetric skew.
+         */
+        raw <- rlnorm(n, meanlog = 0, sdlog = 1)
+        m <- exp(0.5)
+        s <- sqrt((exp(1) - 1) * exp(1))
+        return((raw - m) / s)
+}
+
 #' Generate Linear GCM Data
 #' @param n Sample size.
-#' @param t Number of time points (default 4).
-generate_gcm_data <- function(n, t = 4) {
-        # Latent means: Intercept=6, Slope=2
-        # Variances and Covariances = 1
-        # Basis: 0, 1, 2, 3
+#' @param dist Distribution type.
+#' @param t Number of time points.
+generate_gcm_data <- function(n, dist = "Normal", t = 4) {
+        L_rand <- r_std(n, dist)
+        S_rand <- r_std(n, dist)
         
-        # Latent factors
-        L <- rnorm(n, mean = 6, sd = 1)
-        S <- rnorm(n, mean = 2, sd = 1)
+        L <- 6 + L_rand
+        S <- 2 + S_rand
         
         data <- matrix(0, nrow = n, ncol = t)
         for (i in 1:t) {
-                # y = L + (i-1)*S + e
-                data[, i] <- L + (i - 1) * S + rnorm(n, sd = 1)
+                e <- r_std(n, dist)
+                data[, i] <- L + (i - 1) * S + e
         }
         
         colnames(data) <- paste0("T", 1:t)
@@ -35,11 +52,19 @@ introduce_missingness <- function(data, rate) {
         return(as.data.frame(data_miss))
 }
 
+#' Calculate Relative Bias
+#' @param estimate Estimated value.
+#' @param truth True value.
+calc_rb <- function(estimate, truth) {
+        return((estimate - truth) / truth)
+}
+
 #' Run Simulation Experiment
 #' @param reps Number of replications.
 #' @param n Sample size.
 #' @param miss_rate Missingness rate.
-run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1) {
+#' @param dist Distribution type.
+run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal") {
         true_slope <- 2
         results <- data.frame(FIML = numeric(reps), 
                               MissForest = numeric(reps), 
@@ -52,38 +77,42 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1) {
         '
 
         for (i in 1:reps) {
-                # Generate and break data
-                clean_data <- generate_gcm_data(n)
+                clean_data <- generate_gcm_data(n, dist = dist)
                 miss_data <- introduce_missingness(clean_data, miss_rate)
                 
-                # 1. FIML
-                fit_fiml <- growth(gcm_model, data = miss_data, missing = "fiml")
-                results$FIML[i] <- coef(fit_fiml)["S~1"]
+                fit_fiml <- try(growth(gcm_model, data = miss_data, missing = "fiml"), silent = TRUE)
+                results$FIML[i] <- if (inherits(fit_fiml, "lavaan")) coef(fit_fiml)["S~1"] else NA
                 
-                # 2. Raw missForest
-                imp_mf <- missForest(miss_data)$ximp
-                fit_mf <- growth(gcm_model, data = imp_mf)
-                results$MissForest[i] <- coef(fit_mf)["S~1"]
+                imp_mf <- try(missForest(miss_data)$ximp, silent = TRUE)
+                if (is.data.frame(imp_mf)) {
+                        fit_mf <- try(growth(gcm_model, data = imp_mf), silent = TRUE)
+                        results$MissForest[i] <- if (inherits(fit_mf, "lavaan")) coef(fit_mf)["S~1"] else NA
+                } else {
+                        results$MissForest[i] <- NA
+                }
                 
-                # 3. Smriti
-                imp_smriti <- smriti_impute(miss_data, time_cols = 1:4)
-                fit_smriti <- growth(gcm_model, data = imp_smriti)
-                results$Smriti[i] <- coef(fit_smriti)["S~1"]
+                imp_sm <- try(smriti_impute(miss_data, time_cols = 1:4), silent = TRUE)
+                if (is.data.frame(imp_sm)) {
+                        fit_sm <- try(growth(gcm_model, data = imp_sm), silent = TRUE)
+                        results$Smriti[i] <- if (inherits(fit_sm, "lavaan")) coef(fit_sm)["S~1"] else NA
+                } else {
+                        results$Smriti[i] <- NA
+                }
         }
         
-        # Summarize Relative Bias
-        summary <- colMeans(apply(results, 2, function(x) calc_rb(x, true_slope)))
+        summary <- colMeans(apply(results, 2, function(x) calc_rb(x, true_slope)), na.rm = TRUE)
         return(summary)
 }
 
 # Main Execution
-conditions <- expand.grid(N = c(200, 1000), Miss = c(0.1, 0.3))
+conditions <- expand.grid(N = c(200, 1000), Miss = c(0.1, 0.3), Dist = c("Normal", "Lognormal"))
 final_results <- list()
 
 for (j in 1:nrow(conditions)) {
         cond <- conditions[j, ]
-        cat(sprintf("Running N=%d, Miss=%.1f\n", cond$N, cond$Miss))
-        final_results[[j]] <- run_experiment(reps = 100, n = cond$N, miss_rate = cond$Miss)
+        cat(sprintf("Running N=%d, Miss=%.1f, Dist=%s\n", cond$N, cond$Miss, cond$Dist))
+        res <- run_experiment(reps = 100, n = cond$N, miss_rate = cond$Miss, dist = as.character(cond$Dist))
+        final_results[[j]] <- c(cond, res)
 }
 
 print(do.call(rbind, final_results))
