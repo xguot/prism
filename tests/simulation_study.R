@@ -100,19 +100,22 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal"
                 }
         }
         
-        summary <- colMeans(apply(results, 2, function(x) calc_rb(x, true_slope)), na.rm = TRUE)
-        return(summary)
+        rb_results <- as.data.frame(apply(results, 2, function(x) calc_rb(x, true_slope)))
+        rb_results$N <- n
+        rb_results$Miss <- miss_rate
+        rb_results$Dist <- dist
+        return(rb_results)
 }
 
 # Main Execution
 conditions <- expand.grid(N = c(200, 1000), Miss = c(0.1, 0.3), Dist = c("Normal", "Lognormal"))
-final_results <- list()
+final_results_list <- list()
 
 for (j in 1:nrow(conditions)) {
         cond <- conditions[j, ]
         cat(sprintf("Running N=%d, Miss=%.1f, Dist=%s\n", cond$N, cond$Miss, cond$Dist))
-        res <- run_experiment(reps = 100, n = cond$N, miss_rate = cond$Miss, dist = as.character(cond$Dist))
-        final_results[[j]] <- c(cond, res)
+        final_results_list[[j]] <- run_experiment(reps = 100, n = cond$N, miss_rate = cond$Miss, dist = as.character(cond$Dist))
 }
 
-print(do.call(rbind, final_results))
+final_results <- do.call(rbind, final_results_list)
+saveRDS(final_results, "tests/simulation_results.rds")
