@@ -11,16 +11,16 @@ using namespace arma;
  * splits that collapse the established longitudinal variance.
  */
 // [[Rcpp::export]]
-mat constrain_covariance(mat X_imp, mat Sigma_target, double lambda,
+arma::mat constrain_covariance(arma::mat X_imp, arma::mat Sigma_target, double lambda,
                          double lr, int max_iter)
 {
         int n = X_imp.n_rows;
-        mat X_opt = X_imp;
-        mat Sigma_curr;
-        mat grad;
+        arma::mat X_opt = X_imp;
+        arma::mat Sigma_curr;
+        arma::mat grad;
 
         for (int i = 0; i < max_iter; i++) {
-                Sigma_curr = cov(X_opt);
+                Sigma_curr = arma::cov(X_opt);
 
                 /*
                  * Compute gradient of the Lagrangian penalty:
@@ -31,7 +31,7 @@ mat constrain_covariance(mat X_imp, mat Sigma_target, double lambda,
 
                 X_opt = X_opt - (lr * lambda) * grad;
 
-                if (norm(Sigma_curr - Sigma_target, "fro") < 1e-4)
+                if (arma::norm(Sigma_curr - Sigma_target, "fro") < 1e-4)
                         break;
         }
 
