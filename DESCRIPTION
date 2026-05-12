@@ -8,9 +8,10 @@ Description: An automated routing engine for longitudinal missing data.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.1
 Imports: 
-    Rcpp (>= 1.0.0)
+    Rcpp (>= 1.0.0),
+    missForest
 LinkingTo: 
     Rcpp,
     RcppArmadillo
+Config/roxygen2/version: 8.0.0
