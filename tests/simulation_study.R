@@ -77,30 +77,32 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal"
         for (i in 1:reps) {
                 clean_data <- generate_gcm_data(n, dist = dist)
                 miss_data <- introduce_missingness(clean_data, miss_rate)
-                
+                # 1. FIML
                 fit_fiml <- try(growth(gcm_model, data = miss_data, missing = "fiml"), silent = TRUE)
-                results$FIML[i] <- if (inherits(fit_fiml, "lavaan")) coef(fit_fiml)["S~1"] else NA
-                
+                results$FIML[i] <- if (inherits(fit_fiml, "lavaan")) varTable(fit_fiml)[varTable(fit_fiml)$name == "S", "est"] else NA
+
+                # 2. Raw missForest
                 imp_mf <- try(missForest(miss_data)$ximp, silent = TRUE)
                 if (is.data.frame(imp_mf)) {
                         fit_mf <- try(growth(gcm_model, data = imp_mf), silent = TRUE)
-                        results$MissForest[i] <- if (inherits(fit_mf, "lavaan")) coef(fit_mf)["S~1"] else NA
+                        results$MissForest[i] <- if (inherits(fit_mf, "lavaan")) varTable(fit_mf)[varTable(fit_mf)$name == "S", "est"] else NA
                 } else {
                         results$MissForest[i] <- NA
                 }
-                
+
+                # 3. Smriti
                 imp_sm <- try(smriti_impute(miss_data, time_cols = 1:4), silent = TRUE)
                 if (is.data.frame(imp_sm)) {
                         fit_sm <- try(growth(gcm_model, data = imp_sm), silent = TRUE)
-                        results$Smriti[i] <- if (inherits(fit_sm, "lavaan")) coef(fit_sm)["S~1"] else NA
+                        results$Smriti[i] <- if (inherits(fit_sm, "lavaan")) varTable(fit_sm)[varTable(fit_sm)$name == "S", "est"] else NA
                 } else {
                         results$Smriti[i] <- NA
                 }
-        }
-        
-        rb_results <- as.data.frame(apply(results, 2, function(x) calc_rb(x, true_slope)))
-        rb_results$N <- n
-        rb_results$Miss <- miss_rate
+                }
+
+                # True slope variance is 1.0 based on data generator
+                rb_results <- as.data.frame(apply(results, 2, function(x) calc_rb(x, 1.0)))
+
         rb_results$Dist <- dist
         return(rb_results)
 }

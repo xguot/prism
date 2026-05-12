@@ -23,7 +23,7 @@ ggplot(plot_data, aes(x = Method, y = RB, fill = Method)) +
         facet_grid(Dist ~ Miss, labeller = label_both) +
         scale_fill_brewer(palette = "Set2") +
         theme_minimal() +
-        labs(title = "Relative Bias of Latent Slope Estimate",
+        labs(title = "Relative Bias of Slope Variance Estimate",
              subtitle = "Comparison of FIML, missForest, and Smriti across conditions",
              x = "Method",
              y = "Relative Bias (RB)") +
