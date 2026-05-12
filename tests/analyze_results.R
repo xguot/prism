@@ -12,10 +12,8 @@ plot_data <- final_results %>%
                      names_to = "Method", 
                      values_to = "RB")
 
-/*
- * Crop extreme outliers to prevent raw ML hallucinations from 
- * compressing the scale of the Smriti and FIML performance.
- */
+# Crop extreme outliers to prevent raw ML hallucinations from 
+# compressing the scale of the Smriti and FIML performance.
 plot_data <- plot_data %>%
         filter(RB > -2, RB < 2)
 

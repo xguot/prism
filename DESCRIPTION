@@ -11,6 +11,8 @@ Roxygen: list(markdown = TRUE)
 Imports: 
     Rcpp (>= 1.0.0),
     missForest
+Suggests: 
+    lavaan
 LinkingTo: 
     Rcpp,
     RcppArmadillo

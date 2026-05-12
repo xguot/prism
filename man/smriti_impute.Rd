@@ -15,9 +15,6 @@ longitudinal columns.}
 \item{lambda}{A numeric value specifying the penalty weight for the
 Lagrangian constraint.}
 }
-\value{
-A data frame with imputed and structurally refined values.
-}
 \description{
 This function performs an automated routing and refinement for longitudinal
 missing data. It establishes a target covariance manifold from observed data,

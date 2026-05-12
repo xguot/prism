@@ -10,10 +10,8 @@ r_std <- function(n, dist = "Normal") {
                 return(rnorm(n, mean = 0, sd = 1))
         }
 
-        /*
-         * Shift and scale Lognormal(0,1) to Mean=0 and Var=1 to preserve
-         * fixed effects while testing robustness to non-symmetric skew.
-         */
+        # Shift and scale Lognormal(0,1) to Mean=0 and Var=1 to preserve
+        # fixed effects while testing robustness to non-symmetric skew.
         raw <- rlnorm(n, meanlog = 0, sdlog = 1)
         m <- exp(0.5)
         s <- sqrt((exp(1) - 1) * exp(1))
