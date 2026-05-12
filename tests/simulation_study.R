@@ -57,13 +57,22 @@ calc_rb <- function(estimate, truth) {
         return((estimate - truth) / truth)
 }
 
+#' Extract Slope Variance
+#' @param fit A lavaan object.
+get_slope_var <- function(fit) {
+        if (!inherits(fit, "lavaan")) return(NA)
+        pt <- parameterEstimates(fit)
+        val <- pt$est[pt$lhs == "S" & pt$op == "~~" & pt$rhs == "S"]
+        if (length(val) == 0) return(NA)
+        return(val)
+}
+
 #' Run Simulation Experiment
 #' @param reps Number of replications.
 #' @param n Sample size.
 #' @param miss_rate Missingness rate.
 #' @param dist Distribution type.
 run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal") {
-        true_slope <- 2
         results <- data.frame(FIML = numeric(reps), 
                               MissForest = numeric(reps), 
                               Smriti = numeric(reps))
@@ -71,38 +80,42 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal"
         gcm_model <- '
                 L =~ 1*T1 + 1*T2 + 1*T3 + 1*T4
                 S =~ 0*T1 + 1*T2 + 2*T3 + 3*T4
-                S ~ 1
+                L ~~ L
+                S ~~ S
+                L ~~ S
         '
 
         for (i in 1:reps) {
                 clean_data <- generate_gcm_data(n, dist = dist)
                 miss_data <- introduce_missingness(clean_data, miss_rate)
+                
                 # 1. FIML
                 fit_fiml <- try(growth(gcm_model, data = miss_data, missing = "fiml"), silent = TRUE)
-                results$FIML[i] <- if (inherits(fit_fiml, "lavaan")) varTable(fit_fiml)[varTable(fit_fiml)$name == "S", "est"] else NA
-
+                results$FIML[i] <- get_slope_var(fit_fiml)
+                
                 # 2. Raw missForest
                 imp_mf <- try(missForest(miss_data)$ximp, silent = TRUE)
                 if (is.data.frame(imp_mf)) {
                         fit_mf <- try(growth(gcm_model, data = imp_mf), silent = TRUE)
-                        results$MissForest[i] <- if (inherits(fit_mf, "lavaan")) varTable(fit_mf)[varTable(fit_mf)$name == "S", "est"] else NA
+                        results$MissForest[i] <- get_slope_var(fit_mf)
                 } else {
                         results$MissForest[i] <- NA
                 }
-
+                
                 # 3. Smriti
                 imp_sm <- try(smriti_impute(miss_data, time_cols = 1:4), silent = TRUE)
                 if (is.data.frame(imp_sm)) {
                         fit_sm <- try(growth(gcm_model, data = imp_sm), silent = TRUE)
-                        results$Smriti[i] <- if (inherits(fit_sm, "lavaan")) varTable(fit_sm)[varTable(fit_sm)$name == "S", "est"] else NA
+                        results$Smriti[i] <- get_slope_var(fit_sm)
                 } else {
                         results$Smriti[i] <- NA
                 }
-                }
-
-                # True slope variance is 1.0 based on data generator
-                rb_results <- as.data.frame(apply(results, 2, function(x) calc_rb(x, 1.0)))
-
+        }
+        
+        # True slope variance is 1.0
+        rb_results <- as.data.frame(apply(results, 2, function(x) calc_rb(x, 1.0)))
+        rb_results$N <- n
+        rb_results$Miss <- miss_rate
         rb_results$Dist <- dist
         return(rb_results)
 }
