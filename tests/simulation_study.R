@@ -2,39 +2,40 @@ library(smriti)
 library(missForest)
 library(lavaan)
 
-#' Standardized Random Generation
+#' Generate Linear GCM Data with Latent Correlation
 #' @param n Sample size.
 #' @param dist Distribution type ("Normal" or "Lognormal").
-r_std <- function(n, dist = "Normal") {
-        if (dist == "Normal") {
-                return(rnorm(n, mean = 0, sd = 1))
+#' @param t Number of time points (default 4).
+generate_gcm_data <- function(n, dist = "Normal", t = 4) {
+        rho <- 0.5
+        Z_L <- rnorm(n)
+        Z_S_raw <- rnorm(n)
+        Z_S <- rho * Z_L + sqrt(1 - rho^2) * Z_S_raw
+
+        if (dist == "Lognormal") {
+                u_L <- (exp(Z_L) - exp(0.5)) / sqrt((exp(1) - 1) * exp(1))
+                u_S <- (exp(Z_S) - exp(0.5)) / sqrt((exp(1) - 1) * exp(1))
+        } else {
+                u_L <- Z_L
+                u_S <- Z_S
         }
 
-        # Shift and scale Lognormal(0,1) to Mean=0 and Var=1 to preserve
-        # fixed effects while testing robustness to non-symmetric skew.
-        raw <- rlnorm(n, meanlog = 0, sdlog = 1)
-        m <- exp(0.5)
-        s <- sqrt((exp(1) - 1) * exp(1))
-        return((raw - m) / s)
-}
+        # Fixed effects: Intercept=6, Slope=2
+        L <- 6 + u_L
+        S <- 2 + u_S
 
-#' Generate Linear GCM Data
-#' @param n Sample size.
-#' @param dist Distribution type.
-#' @param t Number of time points.
-generate_gcm_data <- function(n, dist = "Normal", t = 4) {
-        L_rand <- r_std(n, dist)
-        S_rand <- r_std(n, dist)
-        
-        L <- 6 + L_rand
-        S <- 2 + S_rand
-        
         data <- matrix(0, nrow = n, ncol = t)
         for (i in 1:t) {
-                e <- r_std(n, dist)
+                # Standardize residual error
+                e_raw <- rnorm(n)
+                if (dist == "Lognormal") {
+                        e <- (exp(e_raw) - exp(0.5)) / sqrt((exp(1) - 1) * exp(1))
+                } else {
+                        e <- e_raw
+                }
                 data[, i] <- L + (i - 1) * S + e
         }
-        
+
         colnames(data) <- paste0("T", 1:t)
         return(as.data.frame(data))
 }
@@ -80,9 +81,9 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal"
         gcm_model <- '
                 L =~ 1*T1 + 1*T2 + 1*T3 + 1*T4
                 S =~ 0*T1 + 1*T2 + 2*T3 + 3*T4
+                L ~~ 0*S  # Misspecification: incorrectly fixing covariance to 0
                 L ~~ L
                 S ~~ S
-                L ~~ S
         '
 
         for (i in 1:reps) {
