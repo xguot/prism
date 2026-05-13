@@ -6,18 +6,21 @@ if (!exists("final_results")) {
         final_results <- readRDS("tests/simulation_results.rds")
 }
 
+# Assuming the raw data is in a dataframe called final_results
 plot_data <- final_results %>%
-        pivot_longer(cols = c("FIML", "missForest", "Smriti_Nonrobust", "Smriti"), 
-                     names_to = "Method", 
-                     values_to = "RB")
+    tidyr::pivot_longer(
+        cols = c("FIML", "missForest", "smriti_nonrobust", "smriti"), 
+        names_to = "Method", 
+        values_to = "RB"
+    ) %>%
+    dplyr::mutate(
+        Method = factor(Method, levels = c("FIML", "missForest", "smriti_nonrobust", "smriti"))
+    )
 
 # Crop extreme outliers to prevent raw ml hallucinations from 
 # compressing the scale of the smriti and fiml performance.
 plot_data <- plot_data %>%
         filter(RB > -2, RB < 2)
-
-plot_data$Method <- factor(plot_data$Method, 
-                           levels = c("FIML", "missForest", "Smriti_Nonrobust", "Smriti"))
 
 ggplot(plot_data, aes(x = Method, y = RB, fill = Method)) +
         geom_boxplot(alpha = 0.7, outlier.size = 0.5) +

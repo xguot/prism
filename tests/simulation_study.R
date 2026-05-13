@@ -75,8 +75,8 @@ get_slope_var <- function(fit) {
 run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal") {
         results <- data.frame(FIML = numeric(reps), 
                               missForest = numeric(reps),
-                              Smriti_Nonrobust = numeric(reps),
-                              Smriti = numeric(reps))
+                              smriti_nonrobust = numeric(reps),
+                              smriti = numeric(reps))
         
         gcm_model <- '
                 L =~ 1*T1 + 1*T2 + 1*T3 + 1*T4
@@ -105,17 +105,17 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal"
                 imp_sn <- try(smriti_impute(miss_data, time_cols = 1:4, robust = FALSE), silent = TRUE)
                 if (is.data.frame(imp_sn)) {
                         fit_sn <- try(growth(gcm_model, data = imp_sn), silent = TRUE)
-                        results$Smriti_Nonrobust[i] <- get_slope_var(fit_sn)
+                        results$smriti_nonrobust[i] <- get_slope_var(fit_sn)
                 } else {
-                        results$Smriti_Nonrobust[i] <- NA
+                        results$smriti_nonrobust[i] <- NA
                 }
                 
                 imp_sm <- try(smriti_impute(miss_data, time_cols = 1:4), silent = TRUE)
                 if (is.data.frame(imp_sm)) {
                         fit_sm <- try(growth(gcm_model, data = imp_sm), silent = TRUE)
-                        results$Smriti[i] <- get_slope_var(fit_sm)
+                        results$smriti[i] <- get_slope_var(fit_sm)
                 } else {
-                        results$Smriti[i] <- NA
+                        results$smriti[i] <- NA
                 }
         }
         
