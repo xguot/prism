@@ -75,7 +75,8 @@ get_slope_var <- function(fit) {
 #' @param dist Distribution type.
 run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal") {
         results <- data.frame(FIML = numeric(reps), 
-                              MissForest = numeric(reps), 
+                              MissForest = numeric(reps),
+                              Smriti_Nonrobust = numeric(reps),
                               Smriti = numeric(reps))
         
         gcm_model <- '
@@ -102,8 +103,18 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal"
                 } else {
                         results$MissForest[i] <- NA
                 }
+
+                # 3. Smriti (Non-robust)
+                # Acts as the high-efficiency baseline for Gaussian data.
+                imp_sn <- try(smriti_impute(miss_data, time_cols = 1:4, robust = FALSE), silent = TRUE)
+                if (is.data.frame(imp_sn)) {
+                        fit_sn <- try(growth(gcm_model, data = imp_sn), silent = TRUE)
+                        results$Smriti_Nonrobust[i] <- get_slope_var(fit_sn)
+                } else {
+                        results$Smriti_Nonrobust[i] <- NA
+                }
                 
-                # 3. Smriti
+                # 4. Smriti (Robust)
                 imp_sm <- try(smriti_impute(miss_data, time_cols = 1:4), silent = TRUE)
                 if (is.data.frame(imp_sm)) {
                         fit_sm <- try(growth(gcm_model, data = imp_sm), silent = TRUE)
