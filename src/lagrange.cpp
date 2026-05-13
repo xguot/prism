@@ -6,8 +6,7 @@ using namespace Rcpp;
 using namespace arma;
 
 /*
- * project imputed data matrix onto the target covariance manifold.
- * this prevents the non-parametric random forest from hallucinating 
+ * Prevent the non-parametric random forest from hallucinating 
  * splits that collapse the established longitudinal variance.
  */
 // [[Rcpp::export]]
@@ -23,9 +22,7 @@ arma::mat constrain_covariance(arma::mat X_imp, arma::mat Sigma_target, double l
                 Sigma_curr = arma::cov(X_opt);
 
                 /*
-                 * compute gradient of the lagrangian penalty:
-                 * l = ||sigma_curr - sigma_target||^2_f
-                 * scaled by sample size to stabilize the update step.
+                 * Scaled by sample size to stabilize the update step.
                  */
                 grad = (X_opt * (Sigma_curr - Sigma_target)) / (n - 1);
 

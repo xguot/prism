@@ -20,13 +20,11 @@ generate_gcm_data <- function(n, dist = "Normal", t = 4) {
                 u_S <- Z_S
         }
 
-        # fixed effects: intercept=6, slope=2
         L <- 6 + u_L
         S <- 2 + u_S
 
         data <- matrix(0, nrow = n, ncol = t)
         for (i in 1:t) {
-                # standardize residual error
                 e_raw <- rnorm(n)
                 if (dist == "Lognormal") {
                         e <- (exp(e_raw) - exp(0.5)) / sqrt((exp(1) - 1) * exp(1))
@@ -39,6 +37,7 @@ generate_gcm_data <- function(n, dist = "Normal", t = 4) {
         colnames(data) <- paste0("T", 1:t)
         return(as.data.frame(data))
 }
+
 
 #' Introduce MCAR Missingness
 #' @param data Data frame.
@@ -91,11 +90,9 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal"
                 clean_data <- generate_gcm_data(n, dist = dist)
                 miss_data <- introduce_missingness(clean_data, miss_rate)
                 
-                # fiml baseline
                 fit_fiml <- try(growth(gcm_model, data = miss_data, missing = "fiml"), silent = TRUE)
                 results$FIML[i] <- get_slope_var(fit_fiml)
                 
-                # raw missforest imputation
                 imp_mf <- try(missForest(miss_data)$ximp, silent = TRUE)
                 if (is.data.frame(imp_mf)) {
                         fit_mf <- try(growth(gcm_model, data = imp_mf), silent = TRUE)
@@ -104,8 +101,7 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal"
                         results$missForest[i] <- NA
                 }
 
-                # smriti non-robust baseline
-                # acts as the high-efficiency baseline for gaussian data
+                # Acts as the high-efficiency baseline for gaussian data
                 imp_sn <- try(smriti_impute(miss_data, time_cols = 1:4, robust = FALSE), silent = TRUE)
                 if (is.data.frame(imp_sn)) {
                         fit_sn <- try(growth(gcm_model, data = imp_sn), silent = TRUE)
@@ -114,7 +110,6 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal"
                         results$Smriti_Nonrobust[i] <- NA
                 }
                 
-                # smriti robust refinement
                 imp_sm <- try(smriti_impute(miss_data, time_cols = 1:4), silent = TRUE)
                 if (is.data.frame(imp_sm)) {
                         fit_sm <- try(growth(gcm_model, data = imp_sm), silent = TRUE)
@@ -124,7 +119,6 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal"
                 }
         }
         
-        # true slope variance is 1.0
         rb_results <- as.data.frame(apply(results, 2, function(x) calc_rb(x, 1.0)))
         rb_results$N <- n
         rb_results$Miss <- miss_rate

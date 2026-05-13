@@ -2,7 +2,6 @@ library(ggplot2)
 library(dplyr)
 library(tidyr)
 
-# load data if not already in environment
 if (!exists("final_results")) {
         final_results <- readRDS("tests/simulation_results.rds")
 }
@@ -12,12 +11,11 @@ plot_data <- final_results %>%
                      names_to = "Method", 
                      values_to = "RB")
 
-# crop extreme outliers to prevent raw ml hallucinations from 
+# Crop extreme outliers to prevent raw ml hallucinations from 
 # compressing the scale of the smriti and fiml performance.
 plot_data <- plot_data %>%
         filter(RB > -2, RB < 2)
 
-# ensure logical ordering of methods for the x-axis
 plot_data$Method <- factor(plot_data$Method, 
                            levels = c("FIML", "missForest", "Smriti_Nonrobust", "Smriti"))
 

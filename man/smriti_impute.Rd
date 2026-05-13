@@ -4,7 +4,7 @@
 \alias{smriti_impute}
 \title{Smriti Automated Longitudinal Imputation}
 \usage{
-smriti_impute(data, time_cols, lambda = 1)
+smriti_impute(data, time_cols, lambda = 0.5, robust = TRUE)
 }
 \arguments{
 \item{data}{A data frame containing missing values.}
@@ -14,6 +14,11 @@ longitudinal columns.}
 
 \item{lambda}{A numeric value specifying the penalty weight for the
 Lagrangian constraint.}
+
+\item{robust}{A logical value. Setting it to TRUE sacrifices a marginal
+degree of asymptotic efficiency on perfect Gaussian data to secure
+structural integrity against heavy-tailed skew (the robustness-efficiency
+tradeoff).}
 }
 \value{
 A data frame with imputed and structurally refined values.
