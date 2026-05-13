@@ -8,7 +8,7 @@ if (!exists("final_results")) {
 }
 
 plot_data <- final_results %>%
-        pivot_longer(cols = c(FIML, MissForest, Smriti_Nonrobust, Smriti), 
+        pivot_longer(cols = c("FIML", "missForest", "Smriti_Nonrobust", "Smriti"), 
                      names_to = "Method", 
                      values_to = "RB")
 
@@ -19,7 +19,7 @@ plot_data <- plot_data %>%
 
 # ensure logical ordering of methods for the x-axis
 plot_data$Method <- factor(plot_data$Method, 
-                           levels = c("FIML", "MissForest", "Smriti_Nonrobust", "Smriti"))
+                           levels = c("FIML", "missForest", "Smriti_Nonrobust", "Smriti"))
 
 ggplot(plot_data, aes(x = Method, y = RB, fill = Method)) +
         geom_boxplot(alpha = 0.7, outlier.size = 0.5) +

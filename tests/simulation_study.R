@@ -75,7 +75,7 @@ get_slope_var <- function(fit) {
 #' @param dist Distribution type.
 run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal") {
         results <- data.frame(FIML = numeric(reps), 
-                              MissForest = numeric(reps),
+                              missForest = numeric(reps),
                               Smriti_Nonrobust = numeric(reps),
                               Smriti = numeric(reps))
         
@@ -99,9 +99,9 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal"
                 imp_mf <- try(missForest(miss_data)$ximp, silent = TRUE)
                 if (is.data.frame(imp_mf)) {
                         fit_mf <- try(growth(gcm_model, data = imp_mf), silent = TRUE)
-                        results$MissForest[i] <- get_slope_var(fit_mf)
+                        results$missForest[i] <- get_slope_var(fit_mf)
                 } else {
-                        results$MissForest[i] <- NA
+                        results$missForest[i] <- NA
                 }
 
                 # smriti non-robust baseline
