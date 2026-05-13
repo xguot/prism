@@ -19,7 +19,7 @@
 #' @export
 smriti_impute <- function(data, time_cols, lambda = 0.5, robust = TRUE) {
         if (robust) {
-                # Bypass sample covariance to prevent variance collapse under heavy-tailed skew
+                # bypass sample covariance to prevent variance collapse under heavy-tailed skew
                 sigma_target <- MASS::cov.rob(data[, time_cols])$cov
         } else {
                 sigma_target <- stats::cov(data[, time_cols], use = "pairwise.complete.obs")
@@ -28,7 +28,7 @@ smriti_impute <- function(data, time_cols, lambda = 0.5, robust = TRUE) {
         raw_imp_obj <- missForest::missForest(data)
         x_hallucinated <- as.matrix(raw_imp_obj$ximp[, time_cols])
 
-        # Project the ML output back toward the structural manifold
+        # project the ml output back toward the structural manifold
         x_refined <- constrain_covariance(
                 X_imp = x_hallucinated,
                 Sigma_target = sigma_target,
