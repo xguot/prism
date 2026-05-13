@@ -4,7 +4,7 @@
 \alias{smriti_impute}
 \title{Smriti Automated Longitudinal Imputation}
 \usage{
-smriti_impute(data, time_cols, lambda = 0.1)
+smriti_impute(data, time_cols, lambda = 1)
 }
 \arguments{
 \item{data}{A data frame containing missing values.}
@@ -14,6 +14,9 @@ longitudinal columns.}
 
 \item{lambda}{A numeric value specifying the penalty weight for the
 Lagrangian constraint.}
+}
+\value{
+A data frame with imputed and structurally refined values.
 }
 \description{
 This function performs an automated routing and refinement for longitudinal
