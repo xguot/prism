@@ -11,18 +11,20 @@
 #' @param lambda A numeric value specifying the penalty weight for the
 #'   Lagrangian constraint.
 #'
-#' @importFrom stats shapiro.test cov
-#' @importFrom missForest missForest
+#' @return A data frame with imputed and structurally refined values.
 #' @export
-smriti_impute <- function(data, time_cols, lambda = 0.1) {
+smriti_impute <- function(data, time_cols, lambda = 1.0) {
         # 1. Diagnostic: Check if we should even use ML
         miss_rate <- sum(is.na(data)) / prod(dim(data))
         is_normal <- all(apply(data[, time_cols], 2,
-                         function(x) stats::shapiro.test(x)$p.value > 0.05))
+                         function(x) shapiro.test(x)$p.value > 0.05))
 
         # 2. Establish "Ground Truth" Covariance (The Target)
-        # We use FIML or pairwise covariance on observed data
-        sigma_target <- stats::cov(data[, time_cols], use = "pairwise.complete.obs")
+        # Use FIML-based sample covariance for a more robust structural target
+        # than pairwise deletion.
+        sigma_target <- lavaan::lavCor(data[, time_cols], 
+                                      missing = "fiml", 
+                                      output = "cov")
 
         # 3. Raw Machine Learning Imputation
         # Using missForest to get the initial "hallucinated" values
@@ -30,27 +32,17 @@ smriti_impute <- function(data, time_cols, lambda = 0.1) {
         x_hallucinated <- as.matrix(raw_imp_obj$ximp[, time_cols])
 
         # 4. The Lagrangian Refinement (Your C++ Backend)
-        # We project the ML output back toward the target manifold
+        # We project the ML output back toward the target manifold.
+        # Hyperparameters calibrated for aggressive structural recovery.
         x_refined <- constrain_covariance(
                 X_imp = x_hallucinated,
                 Sigma_target = sigma_target,
                 lambda = lambda,
-                lr = 0.01,
-                max_iter = 100
+                lr = 0.1,
+                max_iter = 1000
         )
 
         final_data <- data
         final_data[, time_cols] <- x_refined
         return(final_data)
-}
-
-#' Calculate Relative Bias
-#'
-#' @param estimates A numeric vector of parameter estimates.
-#' @param true_val The true parameter value.
-#'
-#' @return The relative bias in percentage.
-#' @export
-calc_rb <- function(estimates, true_val) {
-        100 * (mean(estimates, na.rm = TRUE) - true_val) / true_val
 }

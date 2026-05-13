@@ -10,8 +10,7 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Imports: 
     Rcpp (>= 1.0.0),
-    missForest
-Suggests: 
+    missForest,
     lavaan
 LinkingTo: 
     Rcpp,
