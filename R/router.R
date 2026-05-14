@@ -18,15 +18,17 @@
 #' @return A data frame with imputed and structurally refined values.
 #' @export
 smriti_impute <- function(data, time_cols, lambda = 0.5, robust = TRUE) {
+        # Initial imputation to establish a complete dataset for routing.
+        # This bypasses the NA limitations of robust estimators like MCD.
+        raw_imp_obj <- missForest::missForest(data)
+        x_hallucinated <- as.matrix(raw_imp_obj$ximp[, time_cols])
+
         if (robust) {
                 # Bypass sample covariance to prevent variance collapse under heavy-tailed skew
-                sigma_target <- MASS::cov.rob(data[, time_cols], method = "mcd")$cov
+                sigma_target <- MASS::cov.rob(x_hallucinated, method = "mcd")$cov
         } else {
                 sigma_target <- stats::cov(data[, time_cols], use = "pairwise.complete.obs")
         }
-
-        raw_imp_obj <- missForest::missForest(data)
-        x_hallucinated <- as.matrix(raw_imp_obj$ximp[, time_cols])
 
         x_refined <- constrain_covariance(
                 X_imp = x_hallucinated,

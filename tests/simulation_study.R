@@ -127,14 +127,16 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal"
 }
 
 # Main Execution
-conditions <- expand.grid(N = c(200, 1000), Miss = c(0.1, 0.3), Dist = c("Normal", "Lognormal"))
-final_results_list <- list()
+if (sys.nframe() == 0) {
+        conditions <- expand.grid(N = c(200, 1000), Miss = c(0.1, 0.3), Dist = c("Normal", "Lognormal"))
+        final_results_list <- list()
 
-for (j in 1:nrow(conditions)) {
-        cond <- conditions[j, ]
-        cat(sprintf("Running N=%d, Miss=%.1f, Dist=%s\n", cond$N, cond$Miss, cond$Dist))
-        final_results_list[[j]] <- run_experiment(reps = 100, n = cond$N, miss_rate = cond$Miss, dist = as.character(cond$Dist))
+        for (j in 1:nrow(conditions)) {
+                cond <- conditions[j, ]
+                cat(sprintf("Running N=%d, Miss=%.1f, Dist=%s\n", cond$N, cond$Miss, cond$Dist))
+                final_results_list[[j]] <- run_experiment(reps = 100, n = cond$N, miss_rate = cond$Miss, dist = as.character(cond$Dist))
+        }
+
+        final_results <- do.call(rbind, final_results_list)
+        saveRDS(final_results, "tests/simulation_results.rds")
 }
-
-final_results <- do.call(rbind, final_results_list)
-saveRDS(final_results, "tests/simulation_results.rds")
