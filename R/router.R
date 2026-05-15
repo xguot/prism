@@ -43,7 +43,7 @@ smriti_impute <- function(data, time_cols, lambda = 0.5, robust = TRUE) {
                 X_imp = x_hallucinated,
                 Sigma_target = sigma_target,
                 lambda = lambda,
-                lr = 0.1,
+                lr = 1e-7,
                 max_iter = 1000
         )
 
