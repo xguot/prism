@@ -2,17 +2,26 @@ Package: smriti
 Title: Automated Routing Engine for Longitudinal Missing Data
 Version: 0.1.0
 Authors@R: person("Xiyuan", "Guo", email = "tommyguo039@gmail.com", role = c("aut", "cre"))
+Author: Xiyuan Guo [aut, cre]
+Maintainer: Xiyuan Guo <tommyguo039@gmail.com>
 Description: An automated routing engine for longitudinal missing data. 
     It gates datasets to either FIML/RMB or a Lagrange-constrained 
     Random Forest based on sample size, missingness rate, and skew.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
+VignetteBuilder: knitr
 Imports: 
     Rcpp (>= 1.0.0),
     missForest,
     lavaan,
     MASS
+Suggests: 
+    ggplot2,
+    tidyr,
+    dplyr,
+    knitr,
+    rmarkdown
 LinkingTo: 
     Rcpp,
     RcppArmadillo
