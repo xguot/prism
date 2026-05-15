@@ -28,12 +28,10 @@ To prevent gradient explosion in the C++ backend when projecting high-magnitude 
 library(smriti)
 library(missForest)
 
-# 1. Load Clinical Data with missingness and sensor artifacts
+# Load clinical data with structural missingness and sensor artifacts
 data <- read.csv("clinical_proxy.csv")
 
-# 2. Execute Robust Imputation
-# By setting robust = TRUE, the MCD estimator ignores extreme sensor artifacts 
-# when projecting the longitudinal target manifold.
+# Execute robust refinement to isolate the structural manifold
 clean_data <- smriti_impute(
   data = data, 
   time_cols = c("T1", "T2", "T3", "T4"), 
