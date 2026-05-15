@@ -1,3 +1,3 @@
 #!/bin/bash
-echo "Running ADNI Structural Validation locally on AMD CPU..."
-Rscript empirical/adni_structural_validation.R
+echo "Running EHR Robustness Validation locally on AMD CPU..."
+Rscript empirical/mimic_ehr_validation.R
