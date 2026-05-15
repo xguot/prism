@@ -2,7 +2,24 @@ library(smriti)
 library(missForest)
 library(lavaan)
 
-#' Generate Linear GCM Data with Latent Correlation
+# Command-line argument parsing for HPC scalability
+args <- commandArgs(trailingOnly = TRUE)
+get_arg <- function(name, default) {
+        idx <- which(args == name)
+        if (length(idx) > 0 && length(args) >= idx + 1) return(args[idx + 1])
+        return(default)
+}
+
+REPS <- as.numeric(get_arg("--reps", 100))
+SEED <- as.numeric(get_arg("--seed", 42))
+
+set.seed(SEED)
+
+#' Construct a Latent Growth Curve Model (GCM) framework to simulate longitudinal trajectories.
+#'
+#' The underlying data-generating process incorporates latent correlation between
+#' intercept and slope to represent realistic structural dependencies.
+#'
 #' @param n Sample size.
 #' @param dist Distribution type ("Normal" or "Lognormal").
 #' @param t Number of time points (default 4).
@@ -39,7 +56,8 @@ generate_gcm_data <- function(n, dist = "Normal", t = 4) {
 }
 
 
-#' Introduce MCAR Missingness
+#' Introduce missingness following a Missing Completely At Random (MCAR) mechanism.
+#'
 #' @param data Data frame.
 #' @param rate Missingness rate.
 introduce_missingness <- function(data, rate) {
@@ -50,14 +68,16 @@ introduce_missingness <- function(data, rate) {
         return(as.data.frame(data_miss))
 }
 
-#' Calculate Relative Bias
+#' Quantify the proportional deviation of the estimate from the population parameter.
+#'
 #' @param estimate Estimated value.
 #' @param truth True value.
 calc_rb <- function(estimate, truth) {
         return((estimate - truth) / truth)
 }
 
-#' Extract Slope Variance
+#' Extract the slope variance parameter from the structural model estimates.
+#'
 #' @param fit A lavaan object.
 get_slope_var <- function(fit) {
         if (!inherits(fit, "lavaan")) return(NA)
@@ -67,7 +87,8 @@ get_slope_var <- function(fit) {
         return(val)
 }
 
-#' Run Simulation Experiment
+#' Execute a Monte Carlo simulation to evaluate recovery across diverse estimators.
+#'
 #' @param reps Number of replications.
 #' @param n Sample size.
 #' @param miss_rate Missingness rate.
@@ -81,7 +102,7 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal"
         gcm_model <- '
                 L =~ 1*T1 + 1*T2 + 1*T3 + 1*T4
                 S =~ 0*T1 + 1*T2 + 2*T3 + 3*T4
-                L ~~ 0*S  # misspecification: incorrectly fixing covariance to 0
+                L ~~ 0*S  # Introduce structural misspecification to test robustness
                 L ~~ L
                 S ~~ S
         '
@@ -101,7 +122,7 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal"
                         results$missForest[i] <- NA
                 }
 
-                # Acts as the high-efficiency baseline for gaussian data
+                # Evaluate the high-efficiency baseline for perfect Gaussian alignment
                 imp_sn <- try(smriti_impute(miss_data, time_cols = 1:4, robust = FALSE), silent = TRUE)
                 if (is.data.frame(imp_sn)) {
                         fit_sn <- try(growth(gcm_model, data = imp_sn), silent = TRUE)
@@ -126,15 +147,15 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1, dist = "Normal"
         return(rb_results)
 }
 
-# Main Execution
+# Orchestrate the simulation grid
 if (sys.nframe() == 0) {
         conditions <- expand.grid(N = c(200, 1000), Miss = c(0.1, 0.3), Dist = c("Normal", "Lognormal"))
         final_results_list <- list()
 
         for (j in 1:nrow(conditions)) {
                 cond <- conditions[j, ]
-                cat(sprintf("Running N=%d, Miss=%.1f, Dist=%s\n", cond$N, cond$Miss, cond$Dist))
-                final_results_list[[j]] <- run_experiment(reps = 100, n = cond$N, miss_rate = cond$Miss, dist = as.character(cond$Dist))
+                cat(sprintf("Running N=%d, Miss=%.1f, Dist=%s with reps=%d\n", cond$N, cond$Miss, cond$Dist, REPS))
+                final_results_list[[j]] <- run_experiment(reps = REPS, n = cond$N, miss_rate = cond$Miss, dist = as.character(cond$Dist))
         }
 
         final_results <- do.call(rbind, final_results_list)

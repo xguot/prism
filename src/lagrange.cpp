@@ -6,8 +6,11 @@ using namespace Rcpp;
 using namespace arma;
 
 /*
- * Prevent the non-parametric random forest from hallucinating 
- * splits that collapse the established longitudinal variance.
+ * Project the non-parametric imputation estimates back toward the structural
+ * manifold defined by the target covariance. This Lagrangian constraint
+ * prevents the variance collapse typically observed in random forest
+ * imputations by penalizing deviations from the established longitudinal
+ * variance structure.
  */
 // [[Rcpp::export]]
 arma::mat constrain_covariance(arma::mat X_imp, arma::mat Sigma_target, double lambda,
@@ -22,12 +25,19 @@ arma::mat constrain_covariance(arma::mat X_imp, arma::mat Sigma_target, double l
                 Sigma_curr = arma::cov(X_opt);
 
                 /*
-                 * Scaled by sample size to stabilize the update step.
+                 * Normalize the gradient by the degrees of freedom (n-1) to ensure
+                 * the optimization step is invariant to sample size, stabilizing
+                 * the manifold projection across varying dataset scales.
                  */
                 grad = (X_opt * (Sigma_curr - Sigma_target)) / (n - 1);
 
                 X_opt = X_opt - (lr * lambda) * grad;
 
+                /*
+                 * Halt iteration once the Frobenius norm of the covariance deviation
+                 * falls below the precision threshold, indicating that the imputed
+                 * data has successfully converged onto the target manifold.
+                 */
                 if (arma::norm(Sigma_curr - Sigma_target, "fro") < 1e-4)
                         break;
         }
