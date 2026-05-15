@@ -28,10 +28,12 @@ cat << EOB > $SLURM_SCRIPT
 # Load Rivanna environment modules for R/C++ backend
 module purge
 module load gcc/11.4.0
-module load openblas/0.3.24
+module load openmpi/4.1.4
 module load R/4.3.1
 
 # Execution
+export R_LIBS_USER=~/R/rivanna-lib
+
 echo "Starting Smriti Longitudinal Refinement Pipeline (1,000 reps) on \$(hostname)..."
 Rscript tests/simulation_study.R --reps 1000 --seed 42
 EOB

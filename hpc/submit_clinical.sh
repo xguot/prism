@@ -28,10 +28,12 @@ cat << EOB > $SLURM_SCRIPT
 # Load Rivanna environment modules
 module purge
 module load gcc/11.4.0
-module load openblas/0.3.24
+module load openmpi/4.1.4
 module load R/4.3.1
 
 # Execution
+export R_LIBS_USER=~/R/rivanna-lib
+
 echo "Starting ADNI Clinical Structural Validation on \$(hostname)..."
 Rscript empirical/adni_structural_validation.R
 EOB
