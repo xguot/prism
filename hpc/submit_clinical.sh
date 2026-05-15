@@ -32,6 +32,7 @@ module load openmpi/4.1.4
 module load R/4.3.1
 
 # Execution
+mkdir -p ~/R/rivanna-lib
 export R_LIBS_USER=~/R/rivanna-lib
 
 echo "Starting ADNI Clinical Structural Validation on \$(hostname)..."
