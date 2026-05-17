@@ -1,0 +1,41 @@
+---
+title: "Introduction to smriti: Structural Variance Preservation"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Introduction to smriti}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+## The Imputation Uncertainty Principle
+Modern machine learning imputation algorithms (like `missForest`) excel at minimizing point-wise prediction error (RMSE). However, this point-wise optimization inherently shrinks the variance of the imputed values, causing **structural variance collapse**. In longitudinal Growth Curve Models (GCM), this crushes the latent slope variance ($\sigma^2_S$), destroying the statistical power needed to track patient trajectories over time.
+
+The `smriti` package resolves this by decoupling prediction from structural geometry. It utilizes a two-stage architecture:
+1. **Initialization:** Non-parametric imputation bridges the missingness to establish a dense matrix.
+2. **Lagrangian Projection:** A C++ gradient descent layer forces the hallucinated data onto a target covariance manifold, constrained by a Lagrangian multiplier ($\lambda$).
+
+## The Robustness-Efficiency Tradeoff
+Real-world clinical data often contains heavy-tailed skew or corrupted sensor artifacts. The `smriti_impute()` function handles this via the `robust` routing toggle.
+
+*   `robust = FALSE`: Utilizes standard pairwise complete covariance. Ideal for perfectly Normal data or naturally heavy-tailed biological distributions (e.g., Lognormal structural neuroimaging).
+*   `robust = TRUE`: Utilizes the Minimum Covariance Determinant (MCD) estimator. It isolates the densest core of the data, creating a target manifold that is mathematically immune to severe clinical outliers (e.g., broken EHR sensors).
+
+## Core Implementation: Handling Gradient Explosion
+To prevent gradient explosion in the C++ backend when projecting high-magnitude clinical markers (e.g., Hippocampal volumes $\approx 7000$), `smriti` enforces internal Z-score standardization. The data is scaled to $\mu=0, \sigma^2=1$ prior to Lagrangian optimization, and un-scaled upon convergence, ensuring absolute numerical stability.
+
+## Example: Shielding Against Corrupted EHR Data
+```{r, eval=FALSE}
+library(smriti)
+library(missForest)
+
+# Load clinical data with structural missingness and sensor artifacts
+data <- read.csv("clinical_proxy.csv")
+
+# Execute robust refinement to isolate the structural manifold
+clean_data <- smriti_impute(
+  data = data, 
+  time_cols = c("T1", "T2", "T3", "T4"), 
+  robust = TRUE,
+  lambda = 0.5
+)
+```

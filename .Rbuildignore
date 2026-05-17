@@ -1,0 +1,8 @@
+^CRAN-SUBMISSION$
+^cran-comments\.md$
+^hpc/
+^tests/simulation_results\.rds$
+^\.Rcheck/
+^.*\.so$
+^src/.*\.o$
+^src/.*\.so$
