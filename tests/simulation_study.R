@@ -47,7 +47,7 @@ generate_gcm_data <- function(n, dist = "Normal", t = 4) {
   s_val <- 2 + u_s
 
   data_mat <- matrix(0, nrow = n, ncol = t)
-  for (i in 1:t) {
+  for (i in seq_len(t)) {
     e_raw <- rnorm(n)
     if (dist == "Lognormal") {
       e_val <- (exp(e_raw) - exp(0.5)) / sqrt((exp(1) - 1) * exp(1))
@@ -69,7 +69,7 @@ generate_gcm_data <- function(n, dist = "Normal", t = 4) {
 #' @param rate Missingness rate.
 introduce_missingness <- function(data, rate) {
   n_cells <- prod(dim(data))
-  indices <- sample(1:n_cells, size = floor(rate * n_cells))
+  indices <- sample(seq_len(n_cells), size = floor(rate * n_cells))
   data_miss <- as.matrix(data)
   data_miss[indices] <- NA
 
@@ -78,8 +78,8 @@ introduce_missingness <- function(data, rate) {
   if (any(all_na)) {
     for (i in which(all_na)) {
       # Restore one random cell in the empty row
-      data_miss[i, sample(1:ncol(data_miss), 1)] <-
-        data[i, sample(1:ncol(data), 1)]
+      data_miss[i, sample(seq_len(ncol(data_miss)), 1)] <-
+        data[i, sample(seq_len(ncol(data)), 1)]
     }
   }
   as.data.frame(data_miss)
@@ -131,7 +131,7 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1,
     S ~~ S
   '
 
-  for (i in 1:reps) {
+  for (i in seq_len(reps)) {
     clean_data <- generate_gcm_data(n, dist = dist)
     miss_data <- introduce_missingness(clean_data, miss_rate)
 
@@ -180,14 +180,16 @@ if (sys.nframe() == 0) {
                             dist_val = c("Normal", "Lognormal"))
   final_results_list <- list()
 
-  for (j in 1:nrow(conditions)) {
+  for (j in seq_len(nrow(conditions))) {
     cond <- conditions[j, ]
     cat(sprintf("Running N=%d, Miss=%.1f, Dist=%s with reps=%d\n",
                 cond$n_val, cond$miss_val, cond$dist_val, reps))
-    final_results_list[[j]] <- run_experiment(reps = reps,
-                                              n = cond$n_val,
-                                              miss_rate = cond$miss_val,
-                                              dist = as.character(cond$dist_val))
+    final_results_list[[j]] <- run_experiment(
+      reps = reps,
+      n = cond$n_val,
+      miss_rate = cond$miss_val,
+      dist = as.character(cond$dist_val)
+    )
   }
 
   final_results <- do.call(rbind, final_results_list)

@@ -19,7 +19,9 @@ results <- data.frame(
 results$Condition <- factor(results$Condition,
   levels = c("Normal (N=1000)", "Normal (N=200)", "Lognormal (N=200)")
 )
-results$Method <- factor(results$Method, levels = c("smriti", "missForest", "FIML"))
+results$Method <- factor(results$Method,
+  levels = c("smriti", "missForest", "FIML")
+)
 
 # Define colors
 method_colors <- c(

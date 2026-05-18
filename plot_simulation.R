@@ -19,7 +19,9 @@ results <- data.frame(
 results$Condition <- factor(results$Condition,
   levels = c("Normal (N=1000)", "Normal (N=200)", "Lognormal (N=200)")
 )
-results$Method <- factor(results$Method, levels = c("FIML", "missForest", "smriti"))
+results$Method <- factor(results$Method,
+  levels = c("FIML", "missForest", "smriti")
+)
 
 p <- ggplot(results, aes(x = Bias, y = Method, color = Method)) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "gray50", size = 1) +
