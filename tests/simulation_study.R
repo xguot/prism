@@ -31,34 +31,34 @@ set.seed(seed)
 #' @param t Number of time points (default 4).
 generate_gcm_data <- function(n, dist = "Normal", t = 4) {
   rho <- 0.5
-  Z_L <- rnorm(n)
-  Z_S_raw <- rnorm(n)
-  Z_S <- rho * Z_L + sqrt(1 - rho^2) * Z_S_raw
+  z_l_raw <- rnorm(n)
+  z_s_raw <- rnorm(n)
+  z_s <- rho * z_l_raw + sqrt(1 - rho^2) * z_s_raw
 
   if (dist == "Lognormal") {
-    u_L <- (exp(Z_L) - exp(0.5)) / sqrt((exp(1) - 1) * exp(1))
-    u_S <- (exp(Z_S) - exp(0.5)) / sqrt((exp(1) - 1) * exp(1))
+    u_l <- (exp(z_l_raw) - exp(0.5)) / sqrt((exp(1) - 1) * exp(1))
+    u_s <- (exp(z_s) - exp(0.5)) / sqrt((exp(1) - 1) * exp(1))
   } else {
-    u_L <- Z_L
-    u_S <- Z_S
+    u_l <- z_l_raw
+    u_s <- z_s
   }
 
-  L <- 6 + u_L
-  S <- 2 + u_S
+  l_val <- 6 + u_l
+  s_val <- 2 + u_s
 
-  data <- matrix(0, nrow = n, ncol = t)
+  data_mat <- matrix(0, nrow = n, ncol = t)
   for (i in 1:t) {
     e_raw <- rnorm(n)
     if (dist == "Lognormal") {
-      e <- (exp(e_raw) - exp(0.5)) / sqrt((exp(1) - 1) * exp(1))
+      e_val <- (exp(e_raw) - exp(0.5)) / sqrt((exp(1) - 1) * exp(1))
     } else {
-      e <- e_raw
+      e_val <- e_raw
     }
-    data[, i] <- L + (i - 1) * S + e
+    data_mat[, i] <- l_val + (i - 1) * s_val + e_val
   }
 
-  colnames(data) <- paste0("T", 1:t)
-  as.data.frame(data)
+  colnames(data_mat) <- paste0("T", 1:t)
+  as.data.frame(data_mat)
 }
 
 
@@ -118,8 +118,8 @@ get_slope_var <- function(fit) {
 #' @param dist Distribution type.
 run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1,
                            dist = "Normal") {
-  results <- data.frame(FIML = numeric(reps),
-                        missForest = numeric(reps),
+  results <- data.frame(fiml = numeric(reps),
+                        miss_forest = numeric(reps),
                         smriti_nonrobust = numeric(reps),
                         smriti = numeric(reps))
 
@@ -137,14 +137,14 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1,
 
     fit_fiml <- try(growth(gcm_model, data = miss_data, missing = "fiml"),
                     silent = TRUE)
-    results$FIML[i] <- get_slope_var(fit_fiml)
+    results$fiml[i] <- get_slope_var(fit_fiml)
 
     imp_mf <- try(missForest(miss_data)$ximp, silent = TRUE)
     if (is.data.frame(imp_mf)) {
       fit_mf <- try(growth(gcm_model, data = imp_mf), silent = TRUE)
-      results$missForest[i] <- get_slope_var(fit_mf)
+      results$miss_forest[i] <- get_slope_var(fit_mf)
     } else {
-      results$missForest[i] <- NA
+      results$miss_forest[i] <- NA
     }
 
     # Evaluate the high-efficiency baseline for perfect Gaussian alignment
@@ -167,25 +167,27 @@ run_experiment <- function(reps = 100, n = 200, miss_rate = 0.1,
   }
 
   rb_results <- as.data.frame(apply(results, 2, function(x) calc_rb(x, 1.0)))
-  rb_results$N <- n
-  rb_results$Miss <- miss_rate
-  rb_results$Dist <- dist
+  rb_results$n <- n
+  rb_results$miss <- miss_rate
+  rb_results$dist <- dist
   rb_results
 }
 
 # Orchestrate the simulation grid
 if (sys.nframe() == 0) {
-  conditions <- expand.grid(N = c(200, 1000), Miss = c(0.1, 0.3),
-                            Dist = c("Normal", "Lognormal"))
+  conditions <- expand.grid(n_val = c(200, 1000),
+                            miss_val = c(0.1, 0.3),
+                            dist_val = c("Normal", "Lognormal"))
   final_results_list <- list()
 
   for (j in 1:nrow(conditions)) {
     cond <- conditions[j, ]
     cat(sprintf("Running N=%d, Miss=%.1f, Dist=%s with reps=%d\n",
-                cond$N, cond$Miss, cond$Dist, reps))
-    final_results_list[[j]] <- run_experiment(reps = reps, n = cond$N,
-                                              miss_rate = cond$Miss,
-                                              dist = as.character(cond$Dist))
+                cond$n_val, cond$miss_val, cond$dist_val, reps))
+    final_results_list[[j]] <- run_experiment(reps = reps,
+                                              n = cond$n_val,
+                                              miss_rate = cond$miss_val,
+                                              dist = as.character(cond$dist_val))
   }
 
   final_results <- do.call(rbind, final_results_list)
