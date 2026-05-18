@@ -18,36 +18,36 @@
 #' @return A data frame with imputed and structurally refined values.
 #' @export
 smriti_impute <- function(data, time_cols, lambda = 0.5, robust = TRUE) {
-        # Generate a dense starting point via non-parametric imputation.
-        # We utilize missForest to establish an initial point-cloud that is then
-        # routed toward the target manifold; this intermediate step is required
-        # because robust estimators like the Minimum Covariance Determinant (MCD)
-        # cannot be directly computed on datasets with missing values.
-        raw_imp_obj <- missForest::missForest(data)
-        x_hallucinated <- as.matrix(raw_imp_obj$ximp[, time_cols])
+  # Generate a dense starting point via non-parametric imputation.
+  # We utilize missForest to establish an initial point-cloud that is then
+  # routed toward the target manifold; this intermediate step is required
+  # because robust estimators like the Minimum Covariance Determinant (MCD)
+  # cannot be directly computed on datasets with missing values.
+  raw_imp_obj <- missForest::missForest(data)
+  x_hallucinated <- as.matrix(raw_imp_obj$ximp[, time_cols])
 
-        if (robust) {
-                # Employ a robust estimator to protect the structural manifold against
-                # distributional contamination. Using the MCD estimator ensures that
-                # the target covariance is not biased by outliers or heavy-tailed skew,
-                # which would otherwise distort the Lagrangian projection.
-                sigma_target <- MASS::cov.rob(x_hallucinated, method = "mcd")$cov
-        } else {
-                # Establish the target manifold based on all available pairwise
-                # information, prioritizing maximal use of observed data over
-                # robustness to extreme deviations.
-                sigma_target <- stats::cov(data[, time_cols], use = "pairwise.complete.obs")
-        }
+  if (robust) {
+    # Employ a robust estimator to protect the structural manifold against
+    # distributional contamination. Using the MCD estimator ensures that
+    # the target covariance is not biased by outliers or heavy-tailed skew,
+    # which would otherwise distort the Lagrangian projection.
+    sigma_target <- MASS::cov.rob(x_hallucinated, method = "mcd")$cov
+  } else {
+    # Establish the target manifold based on all available pairwise
+    # information, prioritizing maximal use of observed data over
+    # robustness to extreme deviations.
+    sigma_target <- stats::cov(data[, time_cols], use = "pairwise.complete.obs")
+  }
 
-        x_refined <- constrain_covariance(
-                X_imp = x_hallucinated,
-                Sigma_target = sigma_target,
-                lambda = lambda,
-                lr = 1e-7,
-                max_iter = 1000
-        )
+  x_refined <- constrain_covariance(
+    X_imp = x_hallucinated,
+    Sigma_target = sigma_target,
+    lambda = lambda,
+    lr = 1e-7,
+    max_iter = 1000
+  )
 
-        final_data <- data
-        final_data[, time_cols] <- x_refined
-        return(final_data)
+  final_data <- data
+  final_data[, time_cols] <- x_refined
+  return(final_data)
 }

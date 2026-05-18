@@ -2,6 +2,5 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 constrain_covariance <- function(X_imp, Sigma_target, lambda, lr, max_iter) {
-    .Call(`_smriti_constrain_covariance`, X_imp, Sigma_target, lambda, lr, max_iter)
+  .Call(`_smriti_constrain_covariance`, X_imp, Sigma_target, lambda, lr, max_iter)
 }
-

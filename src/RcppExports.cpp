@@ -15,24 +15,24 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 arma::mat constrain_covariance(arma::mat X_imp, arma::mat Sigma_target, double lambda, double lr, int max_iter);
 RcppExport SEXP _smriti_constrain_covariance(SEXP X_impSEXP, SEXP Sigma_targetSEXP, SEXP lambdaSEXP, SEXP lrSEXP, SEXP max_iterSEXP) {
 BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< arma::mat >::type X_imp(X_impSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type Sigma_target(Sigma_targetSEXP);
-    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
-    Rcpp::traits::input_parameter< double >::type lr(lrSEXP);
-    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
-    rcpp_result_gen = Rcpp::wrap(constrain_covariance(X_imp, Sigma_target, lambda, lr, max_iter));
-    return rcpp_result_gen;
+  Rcpp::RObject rcpp_result_gen;
+  Rcpp::RNGScope rcpp_rngScope_gen;
+  Rcpp::traits::input_parameter< arma::mat >::type X_imp(X_impSEXP);
+  Rcpp::traits::input_parameter< arma::mat >::type Sigma_target(Sigma_targetSEXP);
+  Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
+  Rcpp::traits::input_parameter< double >::type lr(lrSEXP);
+  Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+  rcpp_result_gen = Rcpp::wrap(constrain_covariance(X_imp, Sigma_target, lambda, lr, max_iter));
+  return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_smriti_constrain_covariance", (DL_FUNC) &_smriti_constrain_covariance, 5},
-    {NULL, NULL, 0}
+  {"_smriti_constrain_covariance", (DL_FUNC) &_smriti_constrain_covariance, 5},
+  {NULL, NULL, 0}
 };
 
 RcppExport void R_init_smriti(DllInfo *dll) {
-    R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
-    R_useDynamicSymbols(dll, FALSE);
+  R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
+  R_useDynamicSymbols(dll, FALSE);
 }
