@@ -36,7 +36,9 @@ smriti_impute <- function(data, time_cols, lambda = 0.5, robust = TRUE) {
     # Establish the target manifold based on all available pairwise
     # information, prioritizing maximal use of observed data over
     # robustness to extreme deviations.
-    sigma_target <- stats::cov(data[, time_cols], use = "pairwise.complete.obs")
+    sigma_target <- stats::cov(data[, time_cols],
+      use = "pairwise.complete.obs"
+    )
   }
 
   x_refined <- constrain_covariance(
@@ -49,5 +51,5 @@ smriti_impute <- function(data, time_cols, lambda = 0.5, robust = TRUE) {
 
   final_data <- data
   final_data[, time_cols] <- x_refined
-  return(final_data)
+  final_data
 }
