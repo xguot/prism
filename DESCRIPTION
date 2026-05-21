@@ -1,6 +1,6 @@
 Package: smriti
 Title: Automated Routing Engine for Longitudinal Missing Data
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: person("Xiyuan", "Guo", email = "tommyguo039@gmail.com", role = c("aut", "cre"))
 Description: An automated routing engine for longitudinal missing data. 
     It utilizes a Lagrange-constrained Random Forest based on sample size, 
@@ -11,8 +11,7 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 VignetteBuilder: knitr
 Imports: 
-    Rcpp (>= 1.0.0),
-    MASS
+    Rcpp (>= 1.0.0)
 Suggests: 
     missForest,
     lavaan,
@@ -20,7 +19,8 @@ Suggests:
     tidyr,
     dplyr,
     knitr,
-    rmarkdown
+    rmarkdown,
+    MASS
 LinkingTo: 
     Rcpp,
     RcppArmadillo

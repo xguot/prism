@@ -1,6 +1,8 @@
-library(smriti)
-library(missForest)
-library(lavaan)
+if (requireNamespace("missForest", quietly = TRUE) &&
+    requireNamespace("lavaan", quietly = TRUE)) {
+  library(smriti)
+  library(missForest)
+  library(lavaan)
 
 # Command-line argument parsing for HPC scalability
 args <- commandArgs(trailingOnly = TRUE)
@@ -196,4 +198,5 @@ if (sys.nframe() == 0) {
   # Write to current directory; R CMD check runs tests in a temporary 'tests'
   # folder
   saveRDS(final_results, "simulation_results.rds")
+}
 }

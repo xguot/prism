@@ -3,6 +3,12 @@
 ^hpc/
 ^tests/simulation_results\.rds$
 ^\.Rcheck/
+^smriti\.Rcheck/
+^smriti/
 ^.*\.so$
 ^src/.*\.o$
 ^src/.*\.so$
+^.*\.png$
+^[^/]*\.R$
+^\.gitignore$
+^\.Rbuildignore$

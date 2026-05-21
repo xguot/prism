@@ -8,7 +8,7 @@ smriti_impute(
   data,
   time_cols,
   initial_imputation = NULL,
-  lambda = 1.0,
+  lambda = 1,
   learning_rate = 0.001,
   tol = 1e-06,
   max_iter = 2000,
