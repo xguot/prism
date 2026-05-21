@@ -35,7 +35,7 @@ nearest_psd <- function(mat) {
 #' @param lambda A numeric value specifying the per-observation penalty weight
 #'   on the covariance-constraint term.  The covariance gradient is deliberately
 #'   un-normalised (no division by n-1) so the constraint remains effective at
-#'   any sample size.  Defaults to 0.1.  Increase for higher-dimensional or
+#'   any sample size.  Defaults to 1.0.  Increase for higher-dimensional or
 #'   noisy targets; decrease for small samples.
 #' @param learning_rate A numeric value for the gradient descent step size.
 #'   Defaults to 0.001.
@@ -54,7 +54,7 @@ nearest_psd <- function(mat) {
 #'   returned unchanged.
 #' @export
 smriti_impute <- function(data, time_cols, initial_imputation = NULL,
-                          lambda = 0.1, learning_rate = 0.001, tol = 1e-6,
+                          lambda = 1.0, learning_rate = 0.001, tol = 1e-6,
                           max_iter = 2000, robust = TRUE) {
 
   # ---- 1.  missingness mask ----
@@ -62,7 +62,15 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
   mask    <- ifelse(is.na(x_raw), 1.0, 0.0)
   storage.mode(mask) <- "double"   # Armadillo expects numeric, not logical
 
-  # ---- 2.  initial imputation ----
+  # ---- 2.  check for entirely-missing columns ----
+  na_counts <- colSums(is.na(data[, time_cols]))
+  all_missing <- na_counts == nrow(data)
+  if (any(all_missing)) {
+    stop("Column(s) ", paste(names(which(all_missing)), collapse = ", "),
+         " are 100% missing; target covariance cannot be estimated.")
+  }
+
+  # ---- 3.  initial imputation ----
   if (is.null(initial_imputation)) {
     warning("initial_imputation is NULL. Falling back to simple column-mean ",
             "imputation. For better results, consider passing an initial ",
@@ -79,7 +87,7 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
     x_hallucinated <- as.matrix(initial_imputation)
   }
 
-  # ---- 3.  target covariance from raw (incomplete) data ----
+  # ---- 4.  target covariance from raw (incomplete) data ----
   if (robust) {
     # Robust path: pairwise Spearman correlation -> nearest PSD -> scale by
     # column MAD.  The PSD projection fixes the non-positive-definiteness
@@ -102,7 +110,7 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
     sigma_target <- nearest_psd(sigma_target)
   }
 
-  # ---- 4.  validate target conditioning ----
+  # ---- 5.  validate target conditioning ----
   # Allow zero eigenvalues (valid PSD matrix); reject only negative ones.
   target_eig <- eigen(sigma_target, symmetric = TRUE,
                       only.values = TRUE)$values
@@ -112,35 +120,30 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
          "This should not happen after nearest_psd(). Please report as a bug.")
   }
 
-  # ---- 5.  C++ Lagrangian projection ----
+  # ---- 6.  C++ Lagrangian projection ----
   x_refined <- constrain_covariance(
     X_imp        = x_hallucinated,
     mask         = mask,
     Sigma_target = sigma_target,
     lambda       = lambda,
     lr           = learning_rate,
-    max_iter     = max_iter
+    max_iter     = max_iter,
+    tol          = tol
   )
 
-  # ---- 6.  convergence diagnostic ----
+  # ---- 7.  convergence diagnostic ----
   initial_cov  <- stats::cov(x_hallucinated)
   final_cov    <- stats::cov(x_refined)
   initial_dist <- sqrt(sum((initial_cov - sigma_target)^2))
   final_dist   <- sqrt(sum((final_cov   - sigma_target)^2))
   improvement  <- initial_dist - final_dist
 
-  # Warn only if the projection made the fit *worse* (divergence)
-  if (improvement < 0 && final_dist > tol) {
-    warning(sprintf(
-      paste0("Covariance projection diverged from target. ",
-             "Final Frobenius distance: %.4e (initial: %.4e). ",
-             "Consider reducing learning_rate (currently %.2e) ",
-             "or verifying the target matrix conditioning."),
-      final_dist, initial_dist, learning_rate
-    ))
+  if (final_dist > tol) {
+    warning(sprintf("Covariance projection did not reach tolerance. Final Dist: %.4e (Tol: %.4e).",
+                    final_dist, tol))
   }
 
-  # ---- 7.  verify observed data is untouched ----
+  # ---- 8.  verify observed data is untouched ----
   obs_before <- x_raw[!is.na(x_raw)]
   obs_after  <- x_refined[!is.na(x_raw)]
   if (max(abs(obs_before - obs_after)) > 1e-12) {
@@ -150,7 +153,7 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
             ". This may indicate a bug in the masking logic.")
   }
 
-  # ---- 8.  assemble output ----
+  # ---- 9.  assemble output ----
   final_data <- data
   final_data[, time_cols] <- x_refined
   final_data

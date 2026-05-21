@@ -8,7 +8,7 @@ smriti_impute(
   data,
   time_cols,
   initial_imputation = NULL,
-  lambda = 0.1,
+  lambda = 1.0,
   learning_rate = 0.001,
   tol = 1e-06,
   max_iter = 2000,
@@ -28,7 +28,7 @@ column-mean imputation is performed as a fallback.}
 \item{lambda}{A numeric value specifying the per-observation penalty weight
 on the covariance-constraint term.  The covariance gradient is deliberately
 un-normalised (no division by n-1) so the constraint remains effective at
-any sample size.  Defaults to 0.1.  Increase for higher-dimensional or
+any sample size.  Defaults to 1.0.  Increase for higher-dimensional or
 noisy targets; decrease for small samples.}
 
 \item{learning_rate}{A numeric value for the gradient descent step size.

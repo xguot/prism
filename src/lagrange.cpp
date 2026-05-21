@@ -35,11 +35,12 @@ using namespace arma;
  *   lambda       per-observation penalty on covariance deviation
  *   lr           learning rate
  *   max_iter     maximum iterations
+ *   tol          convergence tolerance (Frobenius norm)
  */
 // [[Rcpp::export]]
 arma::mat constrain_covariance(arma::mat X_imp, arma::mat mask,
                                arma::mat Sigma_target, double lambda,
-                               double lr, int max_iter)
+                               double lr, int max_iter, double tol)
 {
   int n = X_imp.n_rows;
   arma::mat X_opt  = X_imp;
@@ -58,8 +59,10 @@ arma::mat constrain_covariance(arma::mat X_imp, arma::mat mask,
     grad_fidelity = mask % (X_opt - X_orig);
 
     // ---- 4.  covariance-constraint gradient (un-normalised: no 1/(n-1)) ----
-    // d/dX ||cov(X) - Sigma||^2 = 4 * X_tilde * (cov(X) - Sigma)
-    // With (lambda/2) weight: 2*lambda * X_tilde * (cov(X) - Sigma)
+    // The augmented loss includes (lambda/2) * ||cov(X) - Sigma_target||_F^2.
+    // The gradient of ||cov(X) - Sigma_target||_F^2 w.r.t. X, without the
+    // 1/(n-1) normalisation, is 4 * X_tilde * (cov(X) - Sigma_target).
+    // With the (lambda/2) factor applied: 2 * lambda * X_tilde * (cov(X) - Sigma_target).
     grad_cov = 2.0 * lambda * X_centered * (Sigma_curr - Sigma_target);
 
     // ---- 5.  gradient step (masked: only update originally-missing cells) ----
@@ -76,7 +79,7 @@ arma::mat constrain_covariance(arma::mat X_imp, arma::mat mask,
 
     // ---- 7.  convergence check (post-update) ----
     Sigma_new = arma::cov(X_opt);
-    if (arma::norm(Sigma_new - Sigma_target, "fro") < 1e-6)
+    if (arma::norm(Sigma_new - Sigma_target, "fro") < tol)
       break;
   }
 

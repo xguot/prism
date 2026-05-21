@@ -26,7 +26,7 @@ imputed_data <- smriti_impute(
   data = clinical_df, 
   time_cols = c("V1", "V2", "V3", "V4"),
   lambda = 0.5,
-  robust = TRUE  # Enables the MCD estimator to suppress outliers
+  robust = TRUE  # Enables Spearman + MAD robust estimation
 )
 ```
 
