@@ -19,29 +19,37 @@ The `smriti` package resolves this by decoupling prediction from structural
 geometry. It utilizes a two-stage architecture:
 1. **Initialization:** Non-parametric imputation bridges the missingness to
    establish a dense matrix.
-2. **Lagrangian Projection:** A C++ gradient descent layer forces the
-   hallucinated data onto a target covariance manifold, constrained by a
-   Lagrangian multiplier ($\lambda$).
+2. **Lagrangian Projection:** A C++ gradient descent layer projects the
+   hallucinated data toward a target covariance manifold while preserving
+   fidelity to the initial imputed values. The augmented loss function is
+
+   $$L(X) = \frac{1}{2}\|X - X_{\text{imp}}\|_F^2
+            + \frac{\lambda}{2}\|\operatorname{cov}(X) - \Sigma_{\text{target}}\|_F^2$$
+
+   where the first term anchors the solution near the initial imputation
+   and the second (governed by $\lambda$) enforces the covariance structure.
 
 ## The Robustness-Efficiency Tradeoff
 Real-world clinical data often contains heavy-tailed skew or corrupted sensor
 artifacts. The `smriti_impute()` function handles this via the `robust`
-routing toggle.
+routing toggle:
 
-*   `robust = FALSE`: Utilizes standard pairwise complete covariance. Ideal for
-    perfectly Normal data or naturally heavy-tailed biological distributions
-    (e.g., Lognormal structural neuroimaging).
-*   `robust = TRUE`: Utilizes the Minimum Covariance Determinant (MCD)
-    estimator. It isolates the densest core of the data, creating a target
-    manifold that is mathematically immune to severe clinical outliers (e.g.,
-    broken EHR sensors).
+*   `robust = FALSE`: Uses pairwise-complete Pearson covariance, projected to
+    the nearest positive-semidefinite matrix to correct any non-PSD artefacts
+    from pairwise deletion. Best for well-behaved, approximately-Normal data.
+*   `robust = TRUE`: Constructs the target from pairwise Spearman correlations
+    (rank-based, outlier-resistant) and column-wise MAD scale estimates.
+    The resulting matrix is projected to the nearest PSD manifold, producing a
+    target that is structurally robust to severe outliers (e.g., broken EHR
+    sensors).
 
-## Core Implementation: Handling Gradient Explosion
-To prevent gradient explosion in the C++ backend when projecting
-high-magnitude clinical markers (e.g., Hippocampal volumes $\approx 7000$),
-`smriti` enforces internal Z-score standardization. The data is scaled to
-$\mu=0, \sigma^2=1$ prior to Lagrangian optimization, and un-scaled upon
-convergence, ensuring absolute numerical stability.
+## Fidelity-Constraint Balance
+The penalty weight `lambda` controls the trade-off between preserving the
+original imputation values and matching the target covariance. At `lambda = 1.0`
+(the default) both objectives are weighted equally. Increasing `lambda`
+enforces the covariance constraint more strictly but allows greater deviation
+from the initial imputation. The `learning_rate` (default `0.001`) governs
+gradient step size; `max_iter` (default `2000`) bounds the optimisation.
 
 ## Example: Shielding Against Corrupted EHR Data
 ```{r, eval=FALSE}
@@ -53,9 +61,9 @@ data <- read.csv("clinical_proxy.csv")
 
 # Execute robust refinement to isolate the structural manifold
 clean_data <- smriti_impute(
-  data = data,
-  time_cols = c("T1", "T2", "T3", "T4"),
-  robust = TRUE,
-  lambda = 0.5
+  data       = data,
+  time_cols  = c("T1", "T2", "T3", "T4"),
+  robust     = TRUE,
+  lambda     = 1.0
 )
 ```

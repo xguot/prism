@@ -4,7 +4,16 @@
 \alias{smriti_impute}
 \title{Smriti Automated Longitudinal Imputation}
 \usage{
-smriti_impute(data, time_cols, lambda = 0.5, robust = TRUE)
+smriti_impute(
+  data,
+  time_cols,
+  initial_imputation = NULL,
+  lambda = 1,
+  learning_rate = 0.001,
+  tol = 1e-06,
+  max_iter = 2000,
+  robust = TRUE
+)
 }
 \arguments{
 \item{data}{A data frame containing missing values.}
@@ -12,13 +21,29 @@ smriti_impute(data, time_cols, lambda = 0.5, robust = TRUE)
 \item{time_cols}{A character vector or numeric vector specifying the
 longitudinal columns.}
 
-\item{lambda}{A numeric value specifying the penalty weight for the
-Lagrangian constraint.}
+\item{initial_imputation}{A matrix or data frame of the same dimensions as
+\code{data[, time_cols]}, containing initial imputed values. If \code{NULL}, a simple
+column-mean imputation is performed as a fallback.}
 
-\item{robust}{A logical value. Setting it to TRUE sacrifices a marginal
-degree of asymptotic efficiency on perfect Gaussian data to secure
-structural integrity against heavy-tailed skew (the robustness-efficiency
-tradeoff).}
+\item{lambda}{A numeric value specifying the penalty weight for the
+covariance constraint relative to fidelity to the initial imputation.
+Higher values enforce the target covariance more strictly but allow
+greater deviation from the initial imputed values. Defaults to 1.0.}
+
+\item{learning_rate}{A numeric value for the gradient descent step size.
+Defaults to 0.001.}
+
+\item{tol}{A numeric value for warning threshold on final covariance
+deviation (Frobenius norm). Defaults to 1e-6.}
+
+\item{max_iter}{An integer specifying the maximum number of iterations
+for the gradient descent projection. Defaults to 2000.}
+
+\item{robust}{A logical value. Setting it to TRUE uses a robust target
+constructed from pairwise Spearman correlations and column-wise MAD,
+projected to the nearest positive-semidefinite matrix. This protects
+against outliers and heavy-tailed noise at the cost of some asymptotic
+efficiency under exact Gaussianity.}
 }
 \value{
 A data frame with imputed and structurally refined values.
@@ -26,6 +51,6 @@ A data frame with imputed and structurally refined values.
 \description{
 This function performs an automated routing and refinement for longitudinal
 missing data. It establishes a target covariance manifold from observed data,
-performs initial machine learning imputation, and then projects the result
-back toward the structural manifold using a Lagrangian constraint.
+and then projects an initial imputation back toward the structural manifold
+using a Lagrangian constraint.
 }
