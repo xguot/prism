@@ -79,16 +79,6 @@ smriti_mi <- function(data, time_cols, m = 5, initial_imputation = NULL, ...) {
       next # Discard draw — a column pair has zero pairwise-complete cases
     }
 
-    # Additional safeguard: check that the pairwise correlation matrix is
-    # positive semidefinite (pairwise deletion can break this).
-    cor_eig <- tryCatch(
-      eigen(cor_test, symmetric = TRUE, only.values = TRUE)$values,
-      error = function(e) NULL
-    )
-    if (is.null(cor_eig) || min(cor_eig) < -1e-12) {
-      next # Non-PSD correlation — discard and retry
-    }
-
     # Handle initial imputation for the bootstrap sample
     boot_init <- NULL
     if (!is.null(initial_imputation)) {
