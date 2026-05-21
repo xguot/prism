@@ -26,12 +26,29 @@
 smriti_mi <- function(data, time_cols, m = 5, initial_imputation = NULL, ...) {
   n <- nrow(data)
   imputations <- vector("list", m)
+  
+  i <- 1
+  attempts <- 0
+  max_attempts <- m * 10
 
-  for (i in seq_len(m)) {
+  while (i <= m) {
+    attempts <- attempts + 1
+    if (attempts > max_attempts) {
+      stop(sprintf("Failed to generate %d valid bootstrap samples after %d attempts. ", m, max_attempts),
+           "The data may be too sparse to support pairwise covariance estimation across all time columns.")
+    }
+
     # Bootstrap sample the rows to introduce variation for multiple imputation
     boot_idx <- sample(seq_len(n), n, replace = TRUE)
     boot_data <- data[boot_idx, , drop = FALSE]
     
+    # Structural Safeguard: Verify that the bootstrap sample allows for 
+    # valid pairwise covariance/correlation estimation.
+    cor_test <- suppressWarnings(stats::cor(boot_data[, time_cols], use = "pairwise.complete.obs"))
+    if (anyNA(cor_test)) {
+      next # Discard draw and try again
+    }
+
     # Handle initial imputation for the bootstrap sample
     boot_init <- NULL
     if (!is.null(initial_imputation)) {
@@ -48,6 +65,7 @@ smriti_mi <- function(data, time_cols, m = 5, initial_imputation = NULL, ...) {
     
     # Optional: tag the dataset with its imputation number
     attr(imputations[[i]], "imputation") <- i
+    i <- i + 1
   }
 
   class(imputations) <- c("smriti_mi_list", "list")
