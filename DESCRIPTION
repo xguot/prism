@@ -12,9 +12,9 @@ Roxygen: list(markdown = TRUE)
 VignetteBuilder: knitr
 Imports: 
     Rcpp (>= 1.0.0),
-    missForest,
     MASS
 Suggests: 
+    missForest,
     lavaan,
     ggplot2,
     tidyr,
