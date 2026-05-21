@@ -31,14 +31,17 @@ arma::mat constrain_covariance(arma::mat X_imp, arma::mat Sigma_target, double l
      */
     grad = (X_opt * (Sigma_curr - Sigma_target)) / (n - 1);
 
+    /*
+     * Apply the Lagrangian penalty weight (lambda) and learning rate (lr)
+     * to the gradient update step to move the data toward the target manifold.
+     */
     X_opt = X_opt - (lr * lambda) * grad;
 
     /*
      * Halt iteration once the Frobenius norm of the covariance deviation
-     * falls below the precision threshold, indicating that the imputed
-     * data has successfully converged onto the target manifold.
+     * falls below a stability threshold. 
      */
-    if (arma::norm(Sigma_curr - Sigma_target, "fro") < 1e-4)
+    if (arma::norm(Sigma_curr - Sigma_target, "fro") < 1e-6)
       break;
   }
 
