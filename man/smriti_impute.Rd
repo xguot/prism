@@ -8,7 +8,7 @@ smriti_impute(
   data,
   time_cols,
   initial_imputation = NULL,
-  lambda = 1,
+  lambda = 0.1,
   learning_rate = 0.001,
   tol = 1e-06,
   max_iter = 2000,
@@ -25,16 +25,17 @@ longitudinal columns.}
 \code{data[, time_cols]}, containing initial imputed values. If \code{NULL}, a simple
 column-mean imputation is performed as a fallback.}
 
-\item{lambda}{A numeric value specifying the penalty weight for the
-covariance constraint relative to fidelity to the initial imputation.
-Higher values enforce the target covariance more strictly but allow
-greater deviation from the initial imputed values. Defaults to 1.0.}
+\item{lambda}{A numeric value specifying the per-observation penalty weight
+on the covariance-constraint term.  The covariance gradient is deliberately
+un-normalised (no division by n-1) so the constraint remains effective at
+any sample size.  Defaults to 0.1.  Increase for higher-dimensional or
+noisy targets; decrease for small samples.}
 
 \item{learning_rate}{A numeric value for the gradient descent step size.
 Defaults to 0.001.}
 
-\item{tol}{A numeric value for warning threshold on final covariance
-deviation (Frobenius norm). Defaults to 1e-6.}
+\item{tol}{A numeric value for the internal convergence tolerance
+(Frobenius norm). Defaults to 1e-6.}
 
 \item{max_iter}{An integer specifying the maximum number of iterations
 for the gradient descent projection. Defaults to 2000.}
@@ -47,10 +48,13 @@ efficiency under exact Gaussianity.}
 }
 \value{
 A data frame with imputed and structurally refined values.
+Only the originally-missing cells are modified; observed values are
+returned unchanged.
 }
 \description{
 This function performs an automated routing and refinement for longitudinal
 missing data. It establishes a target covariance manifold from observed data,
 and then projects an initial imputation back toward the structural manifold
-using a Lagrangian constraint.
+using a Lagrangian constraint.  Only originally-missing values are updated;
+observed data is held fixed.
 }

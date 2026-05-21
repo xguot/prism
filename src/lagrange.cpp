@@ -8,54 +8,62 @@ using namespace arma;
 /*
  * Project the non-parametric imputation estimates onto the structural
  * manifold defined by the target covariance while preserving fidelity to
- * the original imputed values. The augmented loss is:
+ * the original imputed values.  Only entries marked in the missingness
+ * mask are updated; observed data is frozen.
  *
- *   L(X) = (1/2) ||X - X_imp||_F^2  +  (lambda/2) ||cov(X) - Sigma_target||_F^2
+ * Augmented loss (applied to missing entries only):
  *
- * The gradient used at each step is:
+ *   L(X) = (1/2) ||M .* (X - X_imp)||_F^2
+ *        + (lambda/2) ||cov(X) - Sigma_target||_F^2
  *
- *   grad = (X - X_imp)  +  (2 * lambda / (n - 1)) * X_tilde * (cov(X) - Sigma_target)
+ * where M is the 0/1 missingness mask (1 = originally missing) and .* is
+ * element-wise multiplication.
  *
- * where X_tilde is the column-centered data matrix. Centering is required
- * because the covariance gradient is defined with respect to mean-centred
- * variables; using raw (uncentered) values would leak location shifts into
- * the covariance projection.
+ * The gradient used at each step (masked so only missing positions move):
+ *
+ *   grad = M .* (X - X_imp)  +  M .* [ 2*lambda * X_tilde * (cov(X) - Sigma_target) ]
+ *
+ * Note: the covariance gradient does NOT divide by (n-1).  This keeps the
+ * gradient scale comparable to the fidelity term regardless of sample size,
+ * preventing the constraint from asymptotically vanishing for large N.
+ * Adjust lambda up or down to control the fidelity/constraint trade-off.
  *
  * Parameters:
- *   X_imp        n x p initial imputation matrix (anchor for fidelity term)
- *   Sigma_target p x p target covariance matrix (must be positive semidefinite)
- *   lambda       trade-off weight on the covariance constraint
- *   lr           learning rate for gradient descent
- *   max_iter     maximum number of iterations
+ *   X_imp        n x p initial imputation matrix
+ *   mask         n x p 0/1 missingness indicator (1 = originally missing)
+ *   Sigma_target p x p target covariance (must be positive semidefinite)
+ *   lambda       per-observation penalty on covariance deviation
+ *   lr           learning rate
+ *   max_iter     maximum iterations
  */
 // [[Rcpp::export]]
-arma::mat constrain_covariance(arma::mat X_imp, arma::mat Sigma_target,
-                               double lambda, double lr, int max_iter)
+arma::mat constrain_covariance(arma::mat X_imp, arma::mat mask,
+                               arma::mat Sigma_target, double lambda,
+                               double lr, int max_iter)
 {
   int n = X_imp.n_rows;
   arma::mat X_opt  = X_imp;
-  arma::mat X_orig = X_imp;   // anchor for fidelity penalty
+  arma::mat X_orig = X_imp;
   arma::mat X_centered, Sigma_curr, grad_fidelity, grad_cov, Sigma_new;
 
   for (int i = 0; i < max_iter; i++) {
 
-    // ---- 1.  centre the data (required for correct covariance gradient) ----
+    // ---- 1.  centre the data ----
     X_centered = X_opt.each_row() - arma::mean(X_opt, 0);
 
-    // ---- 2.  current covariance estimate ----
+    // ---- 2.  current covariance ----
     Sigma_curr = arma::cov(X_opt);
 
-    // ---- 3.  fidelity gradient: keeps X close to the original imputation ----
-    grad_fidelity = X_opt - X_orig;
+    // ---- 3.  fidelity gradient (only non-zero where originally missing) ----
+    grad_fidelity = mask % (X_opt - X_orig);
 
-    // ---- 4.  covariance-constraint gradient ----
-    // d/dX ||cov(X) - Sigma||^2 = (4/(n-1)) * X_tilde * (cov(X) - Sigma)
-    // With the (lambda/2) weight from the loss: multiply by (2*lambda/(n-1))
-    grad_cov =
-        (2.0 * lambda / (n - 1)) * X_centered * (Sigma_curr - Sigma_target);
+    // ---- 4.  covariance-constraint gradient (un-normalised: no 1/(n-1)) ----
+    // d/dX ||cov(X) - Sigma||^2 = 4 * X_tilde * (cov(X) - Sigma)
+    // With (lambda/2) weight: 2*lambda * X_tilde * (cov(X) - Sigma)
+    grad_cov = 2.0 * lambda * X_centered * (Sigma_curr - Sigma_target);
 
-    // ---- 5.  gradient descent step ----
-    X_opt = X_opt - lr * (grad_fidelity + grad_cov);
+    // ---- 5.  gradient step (masked: only update originally-missing cells) ----
+    X_opt = X_opt - lr * (mask % (grad_fidelity + grad_cov));
 
     // ---- 6.  guard against numerical blow-up ----
     if (X_opt.has_nan() || X_opt.has_inf()) {
