@@ -42,7 +42,6 @@ arma::mat constrain_covariance(arma::mat X_imp, arma::mat mask,
                                arma::mat Sigma_target, double lambda,
                                double lr, int max_iter, double tol)
 {
-  int n = X_imp.n_rows;
   arma::mat X_opt  = X_imp;
   arma::mat X_orig = X_imp;
   arma::mat X_centered, Sigma_curr, grad_fidelity, grad_cov, Sigma_new;

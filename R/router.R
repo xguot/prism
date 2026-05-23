@@ -52,6 +52,16 @@ nearest_psd <- function(mat) {
 #' @return A data frame with imputed and structurally refined values.
 #'   Only the originally-missing cells are modified; observed values are
 #'   returned unchanged.
+#'
+#' @examples
+#' # Simulated longitudinal data with scattered missingness
+#' df <- data.frame(
+#'   T1 = c(1.2, NA, 2.8, 3.1),
+#'   T2 = c(2.1, 2.5, NA, 4.0),
+#'   T3 = c(3.0, 3.3, 4.1, NA)
+#' )
+#' smriti_impute(df, time_cols = 1:3, robust = FALSE)
+#'
 #' @export
 smriti_impute <- function(data, time_cols, initial_imputation = NULL,
                           lambda = 1.0, learning_rate = 0.001, tol = 1e-6,
@@ -85,6 +95,13 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
     }
   } else {
     x_hallucinated <- as.matrix(initial_imputation)
+  }
+  # guard against partially-NA initial imputation
+  if (anyNA(x_hallucinated)) {
+    stop("initial_imputation contains missing values. ",
+         "The initial imputation matrix must be fully dense. ",
+         "Ensure the upstream engine produced a complete matrix, ",
+         "or omit the argument to use the column-mean fallback.")
   }
 
   # target covariance from raw (incomplete) data

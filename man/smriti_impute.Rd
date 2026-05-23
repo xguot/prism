@@ -58,3 +58,13 @@ and then projects an initial imputation back toward the structural manifold
 using a Lagrangian constraint.  Only originally-missing values are updated;
 observed data is held fixed.
 }
+\examples{
+# Simulated longitudinal data with scattered missingness
+df <- data.frame(
+  T1 = c(1.2, NA, 2.8, 3.1),
+  T2 = c(2.1, 2.5, NA, 4.0),
+  T3 = c(3.0, 3.3, 4.1, NA)
+)
+smriti_impute(df, time_cols = 1:3, robust = FALSE)
+
+}

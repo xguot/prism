@@ -4,3 +4,4 @@
 constrain_covariance <- function(X_imp, mask, Sigma_target, lambda, lr, max_iter, tol) {
     .Call(`_smriti_constrain_covariance`, X_imp, mask, Sigma_target, lambda, lr, max_iter, tol)
 }
+
