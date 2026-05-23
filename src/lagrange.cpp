@@ -49,26 +49,26 @@ arma::mat constrain_covariance(arma::mat X_imp, arma::mat mask,
 
   for (int i = 0; i < max_iter; i++) {
 
-    // ---- 1.  centre the data ----
+    // ---- centre the data ----
     X_centered = X_opt.each_row() - arma::mean(X_opt, 0);
 
-    // ---- 2.  current covariance ----
+    // ---- current covariance ----
     Sigma_curr = arma::cov(X_opt);
 
-    // ---- 3.  fidelity gradient (only non-zero where originally missing) ----
+    // ---- fidelity gradient (only non-zero where originally missing) ----
     grad_fidelity = mask % (X_opt - X_orig);
 
-    // ---- 4.  covariance-constraint gradient (un-normalised: no 1/(n-1)) ----
+    // ---- covariance-constraint gradient (un-normalised: no 1/(n-1)) ----
     // The augmented loss includes (lambda/2) * ||cov(X) - Sigma_target||_F^2.
     // The gradient of ||cov(X) - Sigma_target||_F^2 w.r.t. X, without the
     // 1/(n-1) normalisation, is 4 * X_tilde * (cov(X) - Sigma_target).
     // With the (lambda/2) factor applied: 2 * lambda * X_tilde * (cov(X) - Sigma_target).
     grad_cov = 2.0 * lambda * X_centered * (Sigma_curr - Sigma_target);
 
-    // ---- 5.  gradient step (masked: only update originally-missing cells) ----
+    // ---- gradient step (masked: only update originally-missing cells) ----
     X_opt = X_opt - lr * (mask % (grad_fidelity + grad_cov));
 
-    // ---- 6.  guard against numerical blow-up ----
+    // ---- guard against numerical blow-up ----
     if (X_opt.has_nan() || X_opt.has_inf()) {
       Rcpp::stop(
           "Numerical instability in covariance projection. "
@@ -77,7 +77,7 @@ arma::mat constrain_covariance(arma::mat X_imp, arma::mat mask,
           "the target matrix is valid before calling constrain_covariance().");
     }
 
-    // ---- 7.  convergence check (post-update) ----
+    // ---- convergence check (post-update) ----
     Sigma_new = arma::cov(X_opt);
     if (arma::norm(Sigma_new - Sigma_target, "fro") < tol)
       break;

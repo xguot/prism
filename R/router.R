@@ -57,12 +57,12 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
                           lambda = 1.0, learning_rate = 0.001, tol = 1e-6,
                           max_iter = 2000, robust = TRUE) {
 
-  # ---- 1.  missingness mask ----
+  # ---- missingness mask ----
   x_raw   <- as.matrix(data[, time_cols])
   mask    <- ifelse(is.na(x_raw), 1.0, 0.0)
   storage.mode(mask) <- "double"   # Armadillo expects numeric, not logical
 
-  # ---- 2.  check for entirely-missing columns ----
+  # ---- check for entirely-missing columns ----
   na_counts <- colSums(is.na(data[, time_cols]))
   all_missing <- na_counts == nrow(data)
   if (any(all_missing)) {
@@ -70,7 +70,7 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
          " are 100% missing; target covariance cannot be estimated.")
   }
 
-  # ---- 3.  initial imputation ----
+  # ---- initial imputation ----
   if (is.null(initial_imputation)) {
     warning("initial_imputation is NULL. Falling back to simple column-mean ",
             "imputation. For better results, consider passing an initial ",
@@ -87,7 +87,7 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
     x_hallucinated <- as.matrix(initial_imputation)
   }
 
-  # ---- 4.  target covariance from raw (incomplete) data ----
+  # ---- target covariance from raw (incomplete) data ----
   if (robust) {
     # Robust path: pairwise Spearman correlation -> nearest PSD -> scale by
     # column MAD.  The PSD projection fixes the non-positive-definiteness
@@ -110,7 +110,7 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
     sigma_target <- nearest_psd(sigma_target)
   }
 
-  # ---- 5.  validate target conditioning ----
+  # ---- validate target conditioning ----
   # Allow zero eigenvalues (valid PSD matrix); reject only negative ones.
   target_eig <- eigen(sigma_target, symmetric = TRUE,
                       only.values = TRUE)$values
@@ -120,7 +120,7 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
          "This should not happen after nearest_psd(). Please report as a bug.")
   }
 
-  # ---- 6.  C++ Lagrangian projection ----
+  # ---- C++ Lagrangian projection ----
   x_refined <- constrain_covariance(
     X_imp        = x_hallucinated,
     mask         = mask,
@@ -131,7 +131,7 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
     tol          = tol
   )
 
-  # ---- 7.  convergence diagnostic ----
+  # ---- convergence diagnostic ----
   initial_cov  <- stats::cov(x_hallucinated)
   final_cov    <- stats::cov(x_refined)
   initial_dist <- sqrt(sum((initial_cov - sigma_target)^2))
@@ -143,7 +143,7 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
                     final_dist, tol))
   }
 
-  # ---- 8.  verify observed data is untouched ----
+  # ---- verify observed data is untouched ----
   obs_before <- x_raw[!is.na(x_raw)]
   obs_after  <- x_refined[!is.na(x_raw)]
   if (max(abs(obs_before - obs_after)) > 1e-12) {
@@ -153,7 +153,7 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
             ". This may indicate a bug in the masking logic.")
   }
 
-  # ---- 9.  assemble output ----
+  # ---- assemble output ----
   final_data <- data
   final_data[, time_cols] <- x_refined
   final_data
