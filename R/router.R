@@ -67,10 +67,18 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
                           lambda = 1.0, learning_rate = 0.001, tol = 1e-6,
                           max_iter = 2000, robust = TRUE) {
 
+  # Type and dimension guards
+  if (nrow(data) <= 1) {
+    stop("Dataset must have >1 row to compute target covariance.")
+  }
+  if (!all(sapply(data[, time_cols], is.numeric))) {
+    stop("All specified time_cols must be strictly numeric.")
+  }
+
   # missingness mask
   x_raw   <- as.matrix(data[, time_cols])
   mask    <- ifelse(is.na(x_raw), 1.0, 0.0)
-  storage.mode(mask) <- "double"   # Armadillo expects numeric, not logical
+  storage.mode(mask) <- "double"   
 
   # check for entirely-missing columns
   na_counts <- colSums(is.na(data[, time_cols]))
@@ -85,7 +93,7 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
     warning("initial_imputation is NULL. Falling back to simple column-mean ",
             "imputation. For better results, consider passing an initial ",
             "imputation from 'missRanger' or 'mice'.")
-
+    
     x_hallucinated <- x_raw
     for (i in seq_len(ncol(x_hallucinated))) {
       na_idx <- is.na(x_hallucinated[, i])
@@ -96,12 +104,11 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
   } else {
     x_hallucinated <- as.matrix(initial_imputation)
   }
-  # guard against partially-NA initial imputation
-  if (anyNA(x_hallucinated)) {
-    stop("initial_imputation contains missing values. ",
-         "The initial imputation matrix must be fully dense. ",
-         "Ensure the upstream engine produced a complete matrix, ",
-         "or omit the argument to use the column-mean fallback.")
+
+  # Terminal guard against user-supplied NA matrices
+  if (any(is.na(x_hallucinated))) {
+    stop("The initial_imputation matrix still contains missing values (NAs). ",
+         "The initial imputation must be complete before covariance projection.")
   }
 
   # target covariance from raw (incomplete) data

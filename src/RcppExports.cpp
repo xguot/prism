@@ -12,14 +12,14 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // constrain_covariance
-arma::mat constrain_covariance(arma::mat X_imp, arma::mat mask, arma::mat Sigma_target, double lambda, double lr, int max_iter, double tol);
+arma::mat constrain_covariance(const arma::mat& X_imp, const arma::mat& mask, const arma::mat& Sigma_target, double lambda, double lr, int max_iter, double tol);
 RcppExport SEXP _smriti_constrain_covariance(SEXP X_impSEXP, SEXP maskSEXP, SEXP Sigma_targetSEXP, SEXP lambdaSEXP, SEXP lrSEXP, SEXP max_iterSEXP, SEXP tolSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< arma::mat >::type X_imp(X_impSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type mask(maskSEXP);
-    Rcpp::traits::input_parameter< arma::mat >::type Sigma_target(Sigma_targetSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type X_imp(X_impSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type mask(maskSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Sigma_target(Sigma_targetSEXP);
     Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
     Rcpp::traits::input_parameter< double >::type lr(lrSEXP);
     Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
