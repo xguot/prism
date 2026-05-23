@@ -1,0 +1,117 @@
+<!DOCTYPE html><html><head><title>R: Smriti Multiple Imputation Wrapper</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.15.3/dist/katex.min.css">
+<script>
+const macros = { "\\R": "\\textsf{R}", "\\mbox": "\\text", "\\code": "\\texttt"};
+function processMathHTML() {
+    var l = document.getElementsByClassName('reqn');
+    for (let e of l) { katex.render(e.textContent, e, { throwOnError: false, macros }); }
+    return;
+}</script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.15.3/dist/katex.min.js"
+    onload="processMathHTML();"></script>
+<link rel="stylesheet" type="text/css" href="R.css">
+</head><body><div class="container"><main>
+
+<table style="width: 100%;"><tr><td>smriti_mi {smriti}</td><td style="text-align: right;">R Documentation</td></tr></table>
+
+<h2>Smriti Multiple Imputation Wrapper</h2>
+
+<h3>Description</h3>
+
+<p>This function generates multiple imputed datasets to capture the uncertainty
+inherent in missing data imputation. It uses bootstrapping to create
+distinct datasets, applies the Smriti Lagrangian refinement to each,
+and returns a list of completed datasets suitable for pooling.
+</p>
+
+
+<h3>Usage</h3>
+
+<pre><code class='language-R'>smriti_mi(data, time_cols, m = 5, initial_imputation = NULL, ...)
+</code></pre>
+
+
+<h3>Arguments</h3>
+
+<table role = "presentation">
+<tr><td><code id="data">data</code></td>
+<td>
+<p>A data frame containing missing values.</p>
+</td></tr>
+<tr><td><code id="time_cols">time_cols</code></td>
+<td>
+<p>A character vector or numeric vector specifying the
+longitudinal columns.</p>
+</td></tr>
+<tr><td><code id="m">m</code></td>
+<td>
+<p>An integer specifying the number of imputations. Defaults to 5.</p>
+</td></tr>
+<tr><td><code id="initial_imputation">initial_imputation</code></td>
+<td>
+<p>A matrix or data frame of the same dimensions as
+<code>data[, time_cols]</code>, containing initial imputed values. If <code>NULL</code>, the
+<code>smriti_impute</code> function's internal fallback (column-mean) is used.</p>
+</td></tr>
+<tr><td><code id="...">...</code></td>
+<td>
+<p>Additional arguments passed to <code><a href="../../smriti/help/smriti_impute.html">smriti_impute()</a></code>, e.g.
+<code>lambda</code>, <code>learning_rate</code>, <code>max_iter</code>, <code>robust</code>.</p>
+</td></tr>
+</table>
+
+
+<h3>Details</h3>
+
+<p><strong>Approximate (bootstrap) multiple imputation.</strong> Proper multiple imputation
+(Rubin 1987) draws imputations from the Bayesian posterior predictive
+distribution of the missing data given the observed data and the imputation
+model. This function instead bootstraps the rows and then deterministically
+applies <code><a href="../../smriti/help/smriti_impute.html">smriti_impute()</a></code> to each bootstrap sample. The between-imputation
+variance therefore captures sampling variability but <em>not</em> the full
+imputation-model uncertainty. The resulting standard errors may be
+moderately anti-conservative. Users needing valid Rubin's-rules pooling
+should treat the output as approximate MI and consider adding a stochastic
+residual-draw step, or use a fully Bayesian engine such as <code>mice</code>.
+</p>
+<p>Pooling the returned list can be performed manually via Rubin's rules:
+</p>
+<div class="sourceCode r"><pre>mi_list &lt;- smriti_mi(df, time_cols = 2:5, m = 10)
+# Within-imputation estimates
+estimates &lt;- lapply(mi_list, function(d) coef(lm(y ~ x, data = d)))
+# Pool with Rubin's rules (point estimate = mean, SE = sqrt(W + (1+1/m)*B))
+</pre></div>
+
+
+<h3>Value</h3>
+
+<p>A list of <code>m</code> completed data frames, each with an <code>"imputation"</code>
+attribute giving its index (1..m). The list has class <code>"smriti_mi_list"</code>.
+</p>
+
+
+<h3>See Also</h3>
+
+<p><code><a href="../../smriti/help/smriti_impute.html">smriti_impute()</a></code> for the single-imputation engine.
+</p>
+
+
+<h3>Examples</h3>
+
+<pre><code class='language-R'>## Not run: 
+df &lt;- data.frame(
+  T1 = c(1, 2, NA, 4),
+  T2 = c(NA, 2, 3, 4),
+  T3 = c(1, NA, 3, 4)
+)
+mi_list &lt;- smriti_mi(df, time_cols = c("T1", "T2", "T3"), m = 5)
+
+## End(Not run)
+</code></pre>
+
+<hr><div style="text-align: center;">[Package <em>smriti</em> version 0.1.1 <a href="00Index.html">Index</a>]</div></main>
+
+</div>
+</body></html>

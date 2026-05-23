@@ -10,21 +10,13 @@ SystemRequirements: C++17
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 VignetteBuilder: knitr
-Imports: 
-    Rcpp (>= 1.0.0)
-Suggests: 
-    missForest,
-    missRanger,
-    ranger,
-    mice,
-    lavaan,
-    ggplot2,
-    tidyr,
-    dplyr,
-    knitr,
-    rmarkdown,
-    MASS
-LinkingTo: 
-    Rcpp,
-    RcppArmadillo
+Imports: Rcpp (>= 1.0.0)
+Suggests: missForest, missRanger, ranger, mice, lavaan, ggplot2, tidyr,
+        dplyr, knitr, rmarkdown, MASS
+LinkingTo: Rcpp, RcppArmadillo
 Config/roxygen2/version: 8.0.0
+NeedsCompilation: yes
+Packaged: 2026-05-23 22:21:33 UTC; xguo
+Author: Xiyuan Guo [aut, cre]
+Maintainer: Xiyuan Guo <tommyguo039@gmail.com>
+Built: R 4.6.0; x86_64-redhat-linux-gnu; 2026-05-23 22:21:46 UTC; unix
