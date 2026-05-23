@@ -7,6 +7,10 @@
 # PSD matrix and are handled by the downstream validation in smriti_impute().
 #' @keywords internal
 nearest_psd <- function(mat) {
+  if (any(is.na(mat))) {
+    stop("Input matrix to nearest_psd contains NAs. This often occurs when pairwise ",
+         "deletion leaves no overlapping observations for a column pair.")
+  }
   eig <- eigen(mat, symmetric = TRUE)
   vals <- eig$values
   if (all(vals > 1e-12)) {
@@ -80,6 +84,17 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
     stop("All specified time_cols must be strictly numeric.")
   }
 
+  # dimension and type validation for initial_imputation
+  if (!is.null(initial_imputation)) {
+    if (nrow(initial_imputation) != nrow(data) || ncol(initial_imputation) != length(time_cols)) {
+      stop("Dimensions of initial_imputation (", nrow(initial_imputation), "x", ncol(initial_imputation),
+           ") must match the target data subset (", nrow(data), "x", length(time_cols), ").")
+    }
+    if (!all(sapply(initial_imputation, is.numeric))) {
+      stop("The initial_imputation matrix must be strictly numeric.")
+    }
+  }
+
   # missingness mask
   x_raw   <- as.matrix(data[, time_cols])
   mask    <- ifelse(is.na(x_raw), 1.0, 0.0)
@@ -110,10 +125,10 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
     x_hallucinated <- as.matrix(initial_imputation)
   }
 
-  # Terminal guard against user-supplied NA matrices
-  if (any(is.na(x_hallucinated))) {
-    stop("The initial_imputation matrix still contains missing values (NAs). ",
-         "The initial imputation must be complete before covariance projection.")
+  # Terminal guard against user-supplied NA/Inf matrices
+  if (any(is.na(x_hallucinated)) || any(is.infinite(x_hallucinated))) {
+    stop("The initial_imputation matrix contains NAs or Infs. ",
+         "The initial imputation must be complete and finite.")
   }
 
   # target covariance from raw (incomplete) data
@@ -145,6 +160,11 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
     sigma_target <- nearest_psd(sigma_target)
   }
 
+  # Pairwise completeness guard: check for NA in covariance (no overlapping obs)
+  if (any(is.na(sigma_target))) {
+    stop("Target covariance contains NAs. Some column pairs have no overlapping observed data.")
+  }
+
   # validate target conditioning
   # Allow zero eigenvalues (valid PSD matrix); reject only negative ones.
   target_eig <- eigen(sigma_target, symmetric = TRUE,
@@ -155,16 +175,35 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
          "This should not happen after nearest_psd(). Please report as a bug.")
   }
 
+  # Standardize the data to prevent gradient blow-up in C++
+  # Large values (e.g. 1e6) cause covariance gradients to explode.
+  col_means <- apply(x_hallucinated, 2, mean)
+  col_sds   <- apply(x_hallucinated, 2, stats::sd)
+  
+  # Avoid division by zero for zero-variance columns
+  col_sds[col_sds < 1e-10] <- 1.0 
+  
+  x_scaled <- scale(x_hallucinated, center = col_means, scale = col_sds)
+  
+  # Scale the target covariance to match the scaled data
+  # Cov(aX, bY) = ab * Cov(X, Y)
+  # Here we are dividing by col_sds, so we multiply target by diag(1/sd)
+  scaling_mat <- diag(1/col_sds)
+  sigma_scaled <- scaling_mat %*% sigma_target %*% scaling_mat
+
   # C++ Lagrangian projection
-  x_refined <- constrain_covariance(
-    X_imp        = x_hallucinated,
+  x_refined_scaled <- constrain_covariance(
+    X_imp        = x_scaled,
     mask         = mask,
-    Sigma_target = sigma_target,
+    Sigma_target = sigma_scaled,
     lambda       = lambda,
     lr           = learning_rate,
     max_iter     = max_iter,
     tol          = tol
   )
+
+  # Unscale the results back to original units
+  x_refined <- t(t(x_refined_scaled) * col_sds + col_means)
 
   # convergence diagnostic
   initial_cov  <- stats::cov(x_hallucinated)
