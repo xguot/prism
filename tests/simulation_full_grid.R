@@ -1,4 +1,4 @@
-# Simulation Study: Tang & Tong (2025) Full Grid Replication
+# Simulation Study: Structural Recovery Benchmark
 #
 # This script evaluates the recovery of latent growth curve parameters and 
 # covariance structures under MAR and MNAR mechanisms, across different 
