@@ -53,9 +53,12 @@ estimates <- lapply(mi_list, function(d) coef(lm(y ~ x, data = d)))
 }
 \examples{
 \dontrun{
-# Assuming 'df' has missing longitudinal data in cols 2:5
-mi_list <- smriti_mi(df, time_cols = 2:5, m = 5)
-# Pool estimates manually via Rubin's rules
+df <- data.frame(
+  T1 = c(1, 2, NA, 4),
+  T2 = c(NA, 2, 3, 4),
+  T3 = c(1, NA, 3, 4)
+)
+mi_list <- smriti_mi(df, time_cols = c("T1", "T2", "T3"), m = 5)
 }
 }
 \seealso{

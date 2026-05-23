@@ -11,6 +11,11 @@
 #'
 #' @return A data frame with covariance-projected imputed values.
 #' @export
+#' @examples
+#' \dontrun{
+#' df <- data.frame(T1 = c(1, NA, 3, 4), T2 = c(NA, 2, 3, 4))
+#' smriti_forest(df, time_cols = 1:2)
+#' }
 smriti_forest <- function(data, time_cols, ...) {
   if (!requireNamespace("missForest", quietly = TRUE)) {
     stop("Package 'missForest' is required for this wrapper. ",
@@ -42,6 +47,11 @@ smriti_forest <- function(data, time_cols, ...) {
 #'
 #' @return A data frame with covariance-projected imputed values.
 #' @export
+#' @examples
+#' \dontrun{
+#' df <- data.frame(T1 = c(1, NA, 3, 4), T2 = c(NA, 2, 3, 4))
+#' smriti_ranger(df, time_cols = 1:2)
+#' }
 smriti_ranger <- function(data, time_cols, ...) {
   if (!requireNamespace("missRanger", quietly = TRUE)) {
     stop("Package 'missRanger' is required for this wrapper. ",
@@ -72,6 +82,11 @@ smriti_ranger <- function(data, time_cols, ...) {
 #'
 #' @return A data frame with covariance-projected imputed values.
 #' @export
+#' @examples
+#' \dontrun{
+#' df <- data.frame(T1 = c(1, NA, 3, 4), T2 = c(NA, 2, 3, 4))
+#' smriti_mice(df, time_cols = 1:2)
+#' }
 smriti_mice <- function(data, time_cols, ...) {
   if (!requireNamespace("mice", quietly = TRUE)) {
     stop("Package 'mice' is required for this wrapper. ",

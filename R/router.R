@@ -48,6 +48,11 @@ nearest_psd <- function(mat) {
 #'   projected to the nearest positive-semidefinite matrix. This protects
 #'   against outliers and heavy-tailed noise at the cost of some asymptotic
 #'   efficiency under exact Gaussianity.
+#' @param custom_target An optional p x p covariance matrix (where p is the
+#'   number of longitudinal columns) to be used as the structural manifold.
+#'   If provided, `robust` and `sigma_target` calculations are bypassed.
+#'   This allows users to supply MAR-valid covariance targets from FIML or
+#'   EM algorithms.
 #'
 #' @return A data frame with imputed and structurally refined values.
 #'   Only the originally-missing cells are modified; observed values are
@@ -65,7 +70,7 @@ nearest_psd <- function(mat) {
 #' @export
 smriti_impute <- function(data, time_cols, initial_imputation = NULL,
                           lambda = 1.0, learning_rate = 0.001, tol = 1e-6,
-                          max_iter = 2000, robust = TRUE) {
+                          max_iter = 2000, robust = TRUE, custom_target = NULL) {
 
   # Type and dimension guards
   if (nrow(data) <= 1) {
@@ -112,7 +117,13 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
   }
 
   # target covariance from raw (incomplete) data
-  if (robust) {
+  if (!is.null(custom_target)) {
+    sigma_target <- as.matrix(custom_target)
+    if (nrow(sigma_target) != length(time_cols) || ncol(sigma_target) != length(time_cols)) {
+      stop("Dimensions of custom_target must match the number of time_cols.")
+    }
+    sigma_target <- nearest_psd(sigma_target)
+  } else if (robust) {
     # Robust path: pairwise Spearman correlation -> nearest PSD -> scale by
     # column MAD.  The PSD projection fixes the non-positive-definiteness
     # that pairwise deletion commonly introduces.
@@ -167,13 +178,17 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
                     final_dist, tol))
   }
 
-  # verify observed data is untouched
-  obs_before <- x_raw[!is.na(x_raw)]
+  # Guarantee original observed values remain perfectly untouched.
+  # This protects against any scaling/drift in the initial_imputation matrix.
+  obs_idx <- !is.na(x_raw)
+  x_refined[obs_idx] <- x_raw[obs_idx]
+
+  # verify observed data is untouched (post-injection guard)
   obs_after  <- x_refined[!is.na(x_raw)]
-  if (max(abs(obs_before - obs_after)) > 1e-12) {
+  if (max(abs(x_raw[!is.na(x_raw)] - obs_after)) > 1e-12) {
     warning("Observed values were unexpectedly modified during projection. ",
             "Maximum observed-value drift: ",
-            format(max(abs(obs_before - obs_after)), digits = 3),
+            format(max(abs(x_raw[!is.na(x_raw)] - obs_after)), digits = 3),
             ". This may indicate a bug in the masking logic.")
   }
 

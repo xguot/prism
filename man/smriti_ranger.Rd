@@ -22,3 +22,9 @@ This function serves as an agnostic refinement layer, combining
 the fast predictive imputation of \code{missRanger} with the structural
 covariance preservation of \code{\link[=smriti_impute]{smriti_impute()}}.
 }
+\examples{
+\dontrun{
+df <- data.frame(T1 = c(1, NA, 3, 4), T2 = c(NA, 2, 3, 4))
+smriti_ranger(df, time_cols = 1:2)
+}
+}

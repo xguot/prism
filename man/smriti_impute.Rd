@@ -12,7 +12,8 @@ smriti_impute(
   learning_rate = 0.001,
   tol = 1e-06,
   max_iter = 2000,
-  robust = TRUE
+  robust = TRUE,
+  custom_target = NULL
 )
 }
 \arguments{
@@ -45,6 +46,12 @@ constructed from pairwise Spearman correlations and column-wise MAD,
 projected to the nearest positive-semidefinite matrix. This protects
 against outliers and heavy-tailed noise at the cost of some asymptotic
 efficiency under exact Gaussianity.}
+
+\item{custom_target}{An optional p x p covariance matrix (where p is the
+number of longitudinal columns) to be used as the structural manifold.
+If provided, \code{robust} and \code{sigma_target} calculations are bypassed.
+This allows users to supply MAR-valid covariance targets from FIML or
+EM algorithms.}
 }
 \value{
 A data frame with imputed and structurally refined values.
