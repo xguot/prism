@@ -14,6 +14,8 @@ Imports:
     Rcpp (>= 1.0.0)
 Suggests: 
     missForest,
+    missRanger,
+    mice,
     lavaan,
     ggplot2,
     tidyr,

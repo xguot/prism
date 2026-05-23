@@ -2,5 +2,8 @@
 
 export(smriti_impute)
 export(smriti_mi)
+export(smriti_forest)
+export(smriti_ranger)
+export(smriti_mice)
 importFrom(Rcpp,sourceCpp)
 useDynLib(smriti, .registration = TRUE)
