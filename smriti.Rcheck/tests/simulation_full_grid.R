@@ -1,7 +1,7 @@
 # Simulation Study: Structural Recovery Benchmark
 #
-# This script evaluates the recovery of latent growth curve parameters and 
-# covariance structures under MAR and MNAR mechanisms, across different 
+# This script evaluates the recovery of latent growth curve parameters and
+# covariance structures under MAR and MNAR mechanisms, across different
 # sample sizes, missingness rates, and distributions.
 
 library(MASS)
@@ -45,28 +45,28 @@ frob_dist <- function(m1, m2) {
 # Data Generation Function
 generate_data <- function(n, dist) {
   # Base Normal Data
-  latent_vars <- mvrnorm(n, mu = c(mu_i, mu_s), 
+  latent_vars <- mvrnorm(n, mu = c(mu_i, mu_s),
                          Sigma = matrix(c(v_i, c_is, c_is, v_s), 2, 2))
-  
+
   if (dist == "Lognormal") {
     # Transform latents to lognormal, then standardize to match moments
     latent_vars <- exp(latent_vars)
     latent_vars[,1] <- scale(latent_vars[,1]) * sqrt(v_i) + mu_i
     latent_vars[,2] <- scale(latent_vars[,2]) * sqrt(v_s) + mu_s
   }
-  
+
   data_mat <- matrix(0, n, t_points)
   for (j in 1:t_points) {
     err <- if(dist == "Lognormal") scale(exp(rnorm(n))) * sqrt(v_e) else rnorm(n, 0, sqrt(v_e))
     data_mat[, j] <- latent_vars[, 1] + (j-1)*latent_vars[, 2] + err
   }
-  
+
   if (dist == "Outlier") {
     # 5% Contaminated Normal (Mean shift = 5)
     out_idx <- sample(1:n, floor(0.05 * n))
     data_mat[out_idx, ] <- data_mat[out_idx, ] + 5.0
   }
-  
+
   colnames(data_mat) <- paste0("T", 1:t_points)
   as.data.frame(data_mat)
 }
@@ -75,7 +75,7 @@ generate_data <- function(n, dist) {
 apply_missingness <- function(df, rate, mech) {
   df_miss <- df
   n <- nrow(df)
-  
+
   if (mech == "MAR") {
     # MAR: Missingness depends on T1
     logit_p <- -2.0 + 0.5 * scale(df$T1)
@@ -93,7 +93,7 @@ apply_missingness <- function(df, rate, mech) {
       df_miss[m_idx, j] <- NA
     }
   }
-  
+
   df_miss
 }
 
@@ -107,16 +107,16 @@ run_iteration <- function(sim_id, params) {
     library(ranger)
     library(smriti)
   })
-  
+
   # Handle environments missing missForest
   has_mf <- requireNamespace("missForest", quietly = TRUE)
-  
+
   res_list <- list()
-  
+
   # Generate Data
   df_true <- generate_data(params$n, params$dist)
   df_miss <- apply_missingness(df_true, params$miss, params$mech)
-  
+
   gcm_mod <- "
     i =~ 1*T1 + 1*T2 + 1*T3 + 1*T4
     s =~ 0*T1 + 1*T2 + 2*T3 + 3*T4
@@ -124,7 +124,7 @@ run_iteration <- function(sim_id, params) {
     i ~~ i
     s ~~ s
   "
-  
+
   # A. FIML (Direct maximum likelihood baseline)
   fit_fiml <- tryCatch(growth(gcm_mod, data = df_miss, missing = "fiml"), error = function(e) NULL)
   s_var_f <- NA; s_se_f <- NA
@@ -137,13 +137,13 @@ run_iteration <- function(sim_id, params) {
     sim_id=sim_id, N=params$n, miss=params$miss, dist=params$dist, mech=params$mech,
     method="FIML", f_dist=NA, s_var=s_var_f, s_se=s_se_f
   )
-  
+
   # B. MICE (CART imputation baseline)
   imp_mice <- tryCatch({
     m_out <- mice::mice(df_miss, m = 1, method = "cart", printFlag = FALSE)
     mice::complete(m_out, 1)
   }, error = function(e) NULL)
-  
+
   s_var_m <- NA; s_se_m <- NA; d_m <- NA
   if (!is.null(imp_mice)) {
     d_m <- frob_dist(stats::cov(imp_mice[,1:t_points]), true_cov)
@@ -158,7 +158,7 @@ run_iteration <- function(sim_id, params) {
     sim_id=sim_id, N=params$n, miss=params$miss, dist=params$dist, mech=params$mech,
     method="MICE", f_dist=d_m, s_var=s_var_m, s_se=s_se_m
   )
-  
+
   # C. missForest (Random Forest baseline)
   imp_mf <- tryCatch({
     if (has_mf) {
@@ -171,7 +171,7 @@ run_iteration <- function(sim_id, params) {
       for(j in 1:4) {
         na_idx <- is.na(df_miss[,j])
         if(any(na_idx)) {
-          mod <- ranger::ranger(dependent.variable.name = colnames(df_miss)[j], 
+          mod <- ranger::ranger(dependent.variable.name = colnames(df_miss)[j],
                                 data = x_init[!na_idx, ], num.trees = 50, verbose = FALSE)
           imp_r_base[na_idx, j] <- predict(mod, x_init[na_idx, ])$predictions
         }
@@ -179,7 +179,7 @@ run_iteration <- function(sim_id, params) {
       imp_r_base
     }
   }, error = function(e) NULL)
-  
+
   s_var_mf <- NA; s_se_mf <- NA; d_mf <- NA
   if (!is.null(imp_mf)) {
     d_mf <- frob_dist(stats::cov(imp_mf[,1:t_points]), true_cov)
@@ -194,7 +194,7 @@ run_iteration <- function(sim_id, params) {
     sim_id=sim_id, N=params$n, miss=params$miss, dist=params$dist, mech=params$mech,
     method="missForest", f_dist=d_mf, s_var=s_var_mf, s_se=s_se_mf
   )
-  
+
   # D. Smriti (Non-Robust: structural projection)
   imp_snr <- tryCatch(smriti_impute(df_miss, time_cols = 1:t_points, initial_imputation = imp_mf, robust = FALSE), error = function(e) NULL)
   s_var_snr <- NA; s_se_snr <- NA; d_snr <- NA
@@ -211,7 +211,7 @@ run_iteration <- function(sim_id, params) {
     sim_id=sim_id, N=params$n, miss=params$miss, dist=params$dist, mech=params$mech,
     method="Smriti_NR", f_dist=d_snr, s_var=s_var_snr, s_se=s_se_snr
   )
-  
+
   # E. Smriti (Robust: structural projection with MAD scaling)
   imp_sr <- tryCatch(smriti_impute(df_miss, time_cols = 1:t_points, initial_imputation = imp_mf, robust = TRUE), error = function(e) NULL)
   s_var_sr <- NA; s_se_sr <- NA; d_sr <- NA
@@ -228,7 +228,7 @@ run_iteration <- function(sim_id, params) {
     sim_id=sim_id, N=params$n, miss=params$miss, dist=params$dist, mech=params$mech,
     method="Smriti_Robust", f_dist=d_sr, s_var=s_var_sr, s_se=s_se_sr
   )
-  
+
   do.call(rbind, res_list)
 }
 
@@ -246,17 +246,17 @@ if (is.na(num_cores) || num_cores < 1) num_cores <- 1
 all_results <- list()
 for (i in 1:total_conditions) {
   params <- conditions[i, ]
-  cat(sprintf("\nRunning Condition %d/%d: N=%d, Miss=%.2f, Dist=%s, Mech=%s\n", 
+  cat(sprintf("\nRunning Condition %d/%d: N=%d, Miss=%.2f, Dist=%s, Mech=%s\n",
               i, total_conditions, params$n, params$miss, params$dist, params$mech))
-  
+
   # Run replications in parallel
   res_cond <- mclapply(1:n_sims, function(sim_id) {
     run_iteration(sim_id, params)
   }, mc.cores = num_cores)
-  
+
   # Combine results
   res_cond <- res_cond[sapply(res_cond, is.data.frame)]
-  
+
   if (length(res_cond) > 0) {
     res_df <- do.call(rbind, res_cond)
     all_results[[i]] <- res_df

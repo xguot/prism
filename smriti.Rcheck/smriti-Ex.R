@@ -30,7 +30,7 @@ base::assign(".ptime", proc.time(), pos = "CheckExEnv")
 
 ### ** Examples
 
-## Not run: 
+## Not run:
 ##D df <- data.frame(T1 = c(1, NA, 3, 4), T2 = c(NA, 2, 3, 4))
 ##D smriti_forest(df, time_cols = 1:2)
 ## End(Not run)
@@ -78,7 +78,7 @@ base::assign(".ptime", proc.time(), pos = "CheckExEnv")
 
 ### ** Examples
 
-## Not run: 
+## Not run:
 ##D df <- data.frame(
 ##D   T1 = c(1, 2, NA, 4),
 ##D   T2 = c(NA, 2, 3, 4),
@@ -104,7 +104,7 @@ base::assign(".ptime", proc.time(), pos = "CheckExEnv")
 
 ### ** Examples
 
-## Not run: 
+## Not run:
 ##D df <- data.frame(T1 = c(1, NA, 3, 4), T2 = c(NA, 2, 3, 4))
 ##D smriti_mice(df, time_cols = 1:2)
 ## End(Not run)
@@ -126,7 +126,7 @@ base::assign(".ptime", proc.time(), pos = "CheckExEnv")
 
 ### ** Examples
 
-## Not run: 
+## Not run:
 ##D df <- data.frame(T1 = c(1, NA, 3, 4), T2 = c(NA, 2, 3, 4))
 ##D smriti_ranger(df, time_cols = 1:2)
 ## End(Not run)
