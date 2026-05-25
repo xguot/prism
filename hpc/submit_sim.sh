@@ -35,8 +35,8 @@ module load R/4.3.1
 mkdir -p ~/R/rivanna-lib
 export R_LIBS_USER=~/R/rivanna-lib
 
-echo "Starting Smriti Longitudinal Refinement Pipeline (1,000 reps) on \$(hostname)..."
-Rscript tests/simulation_study.R --reps 1000 --seed 42
+echo "Starting Smriti Longitudinal Refinement Pipeline on $(hostname)..."
+Rscript hpc/simulation_full_grid.R
 EOB
 
 chmod +x $SLURM_SCRIPT
