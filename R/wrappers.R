@@ -7,6 +7,7 @@
 #' @param data A data frame containing missing values.
 #' @param time_cols A character vector or numeric vector specifying the
 #'   longitudinal columns.
+#' @param robust A logical value. If TRUE (default), uses robust covariance estimation.
 #' @param ... Additional arguments passed directly to [missForest::missForest()].
 #'
 #' @return A data frame with covariance-projected imputed values.
@@ -16,7 +17,7 @@
 #' df <- data.frame(T1 = c(1, NA, 3, 4), T2 = c(NA, 2, 3, 4))
 #' smriti_forest(df, time_cols = 1:2)
 #' }
-smriti_forest <- function(data, time_cols, ...) {
+smriti_forest <- function(data, time_cols, robust = TRUE, ...) {
   if (!requireNamespace("missForest", quietly = TRUE)) {
     stop("Package 'missForest' is required for this wrapper. ",
          "Please install it with install.packages('missForest').",
@@ -30,8 +31,8 @@ smriti_forest <- function(data, time_cols, ...) {
   forest_res <- missForest::missForest(x_subset, ...)
   ximp <- forest_res$ximp
 
-  # Refine via smriti (using default smriti_impute parameters)
-  smriti_impute(data = data, time_cols = time_cols, initial_imputation = ximp)
+  # Refine via smriti
+  smriti_impute(data = data, time_cols = time_cols, initial_imputation = ximp, robust = robust)
 }
 
 #' @title missRanger-Smriti Refinement Wrapper
@@ -43,6 +44,7 @@ smriti_forest <- function(data, time_cols, ...) {
 #' @param data A data frame containing missing values.
 #' @param time_cols A character vector or numeric vector specifying the
 #'   longitudinal columns.
+#' @param robust A logical value. If TRUE (default), uses robust covariance estimation.
 #' @param ... Additional arguments passed directly to [missRanger::missRanger()].
 #'
 #' @return A data frame with covariance-projected imputed values.
@@ -52,7 +54,7 @@ smriti_forest <- function(data, time_cols, ...) {
 #' df <- data.frame(T1 = c(1, NA, 3, 4), T2 = c(NA, 2, 3, 4))
 #' smriti_ranger(df, time_cols = 1:2)
 #' }
-smriti_ranger <- function(data, time_cols, ...) {
+smriti_ranger <- function(data, time_cols, robust = TRUE, ...) {
   if (!requireNamespace("missRanger", quietly = TRUE)) {
     stop("Package 'missRanger' is required for this wrapper. ",
          "Please install it with install.packages('missRanger').",
@@ -65,8 +67,8 @@ smriti_ranger <- function(data, time_cols, ...) {
   # Initial imputation via missRanger
   ximp <- missRanger::missRanger(x_subset, ...)
 
-  # Refine via smriti (using default smriti_impute parameters)
-  smriti_impute(data = data, time_cols = time_cols, initial_imputation = ximp)
+  # Refine via smriti
+  smriti_impute(data = data, time_cols = time_cols, initial_imputation = ximp, robust = robust)
 }
 
 #' @title mice-Smriti Refinement Wrapper
@@ -78,6 +80,7 @@ smriti_ranger <- function(data, time_cols, ...) {
 #' @param data A data frame containing missing values.
 #' @param time_cols A character vector or numeric vector specifying the
 #'   longitudinal columns.
+#' @param robust A logical value. If TRUE (default), uses robust covariance estimation.
 #' @param ... Additional arguments passed directly to [mice::mice()].
 #'
 #' @return A data frame with covariance-projected imputed values.
@@ -87,7 +90,7 @@ smriti_ranger <- function(data, time_cols, ...) {
 #' df <- data.frame(T1 = c(1, NA, 3, 4), T2 = c(NA, 2, 3, 4))
 #' smriti_mice(df, time_cols = 1:2)
 #' }
-smriti_mice <- function(data, time_cols, ...) {
+smriti_mice <- function(data, time_cols, robust = TRUE, ...) {
   if (!requireNamespace("mice", quietly = TRUE)) {
     stop("Package 'mice' is required for this wrapper. ",
          "Please install it with install.packages('mice').",
@@ -103,6 +106,6 @@ smriti_mice <- function(data, time_cols, ...) {
   # Extract first completed dataset
   ximp <- mice::complete(imp, 1)
 
-  # Refine via smriti (using default smriti_impute parameters)
-  smriti_impute(data = data, time_cols = time_cols, initial_imputation = ximp)
+  # Refine via smriti
+  smriti_impute(data = data, time_cols = time_cols, initial_imputation = ximp, robust = robust)
 }
