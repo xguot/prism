@@ -1,19 +1,17 @@
-## Resubmission / Update (v0.1.1)
-This is a patch release fixing a critical stability bug and aligning documentation with the implementation.
+## Resubmission / Update (v0.1.2)
+This is a patch release addressing a test failure on Windows and expanding the unit testing suite.
 
 ### Fixes
-* **Stability:** Fixed a crash (eigenvalue error) when a column is 100% missing. Added a guard clause that stops with an informative message.
-* **Consistency:** Threaded the `tol` parameter from the R interface into the C++ optimization loop (previously hardcoded to 1e-6).
-* **Documentation:** Corrected `README.md` which incorrectly referenced an "MCD" estimator (the implementation uses Spearman + MAD).
-* **Defaults:** Adjusted the `lambda` default to 1.0 in code and documentation to match the vignette and improve convergence out-of-the-box.
-* **Testing:** Wrapped simulation tests in `requireNamespace` checks to ensure clean checks on environments without suggested packages.
+* **Windows Support:** Fixed an ERROR in tests where `mclapply` was called with `mc.cores > 1` on Windows. Added a platform check to fall back to a single core.
+* **Refinement Wrappers:** Added a `robust` parameter to `smriti_forest`, `smriti_mice`, and `smriti_ranger` to allow user-controlled robust covariance projection.
+* **Testing:** Expanded `tests/test_imputation.R` to include professional-grade coverage for MI, wrappers, and internal mathematical projections.
+* **Simulation:** Relocated the full-grid simulation study to `hpc/` and added support for SLURM array jobs for scientific validation.
 
 ## Test Environments
 * local x86_64-pc-linux-gnu (Fedora 44), R 4.6.0
-* Rivanna HPC cluster (CentOS Linux 7), R 4.3.1
 * win-builder (devel)
 
-## R CMD check results (v0.1.1)
+## R CMD check results (v0.1.2)
 0 errors | 0 warnings | 2 notes
 
 *   This is a new submission.
