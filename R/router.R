@@ -98,7 +98,7 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
   # missingness mask
   x_raw   <- as.matrix(data[, time_cols])
   mask    <- ifelse(is.na(x_raw), 1.0, 0.0)
-  storage.mode(mask) <- "double"   
+  storage.mode(mask) <- "double"
 
   # check for entirely-missing columns
   na_counts <- colSums(is.na(data[, time_cols]))
@@ -113,7 +113,7 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
     warning("initial_imputation is NULL. Falling back to simple column-mean ",
             "imputation. For better results, consider passing an initial ",
             "imputation from 'missRanger' or 'mice'.")
-    
+
     x_hallucinated <- x_raw
     for (i in seq_len(ncol(x_hallucinated))) {
       na_idx <- is.na(x_hallucinated[, i])
@@ -179,12 +179,12 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
   # Large values (e.g. 1e6) cause covariance gradients to explode.
   col_means <- apply(x_hallucinated, 2, mean)
   col_sds   <- apply(x_hallucinated, 2, stats::sd)
-  
+
   # Avoid division by zero for zero-variance columns
-  col_sds[col_sds < 1e-10] <- 1.0 
-  
+  col_sds[col_sds < 1e-10] <- 1.0
+
   x_scaled <- scale(x_hallucinated, center = col_means, scale = col_sds)
-  
+
   # Scale the target covariance to match the scaled data
   # Cov(aX, bY) = ab * Cov(X, Y)
   # Here we are dividing by col_sds, so we multiply target by diag(1/sd)
