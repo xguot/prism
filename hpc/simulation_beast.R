@@ -10,8 +10,8 @@ library(missRanger)
 # Neutralize multi-threaded BLAS to prevent resource contention
 Sys.setenv(OMP_NUM_THREADS = "1", MKL_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1")
 
-# Stable Beast Mode: 8 cores provides a safe 2GB RAM per worker on 16GB system
-num_cores <- 8
+# Local Execution Mode: 6 cores provides a safer buffer for 16GB RAM system
+num_cores <- min(6, parallel::detectCores() - 1)
 set.seed(20250523)
 
 # Simulation Grid Configuration
@@ -207,31 +207,19 @@ run_iteration <- function(sim_id, params) {
 # Execution Pipeline
 conditions <- expand.grid(n = grid_n, miss = grid_miss, dist = grid_dist, mech = grid_mech, stringsAsFactors = FALSE)
 
-# Handle SLURM Array Task ID to parallelize across conditions on Rivanna
-array_id <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
-if (!is.na(array_id)) {
-  if (array_id > nrow(conditions)) {
-    stop("SLURM_ARRAY_TASK_ID exceeds the number of conditions in the grid.")
-  }
-  current_conditions <- conditions[array_id, , drop = FALSE]
-  cat(sprintf("[%s] SLURM Array Mode: Processing Condition %d\n", as.character(Sys.time()), array_id))
-} else {
-  current_conditions <- conditions
-  cat(sprintf("[%s] Standard Mode: Processing all %d conditions\n", as.character(Sys.time()), nrow(conditions)))
-}
+cat(sprintf("[%s] Standard Local Mode: Processing all %d conditions\n", as.character(Sys.time()), nrow(conditions)))
 
 dir.create("sim_results", showWarnings = FALSE)
 dir.create("sim_raw_data", showWarnings = FALSE)
+dir.create("sim_plots", showWarnings = FALSE)
 
-cat(sprintf("[%s] Launching Refined Beast Mode across %d cores\n", as.character(Sys.time()), num_cores))
+cat(sprintf("[%s] Launching Refined Local Mode across %d cores\n", as.character(Sys.time()), num_cores))
 
-for (i in seq_len(nrow(current_conditions))) {
-  params <- current_conditions[i, ]
-  # Use array_id for filename if in array mode, else use loop index i
-  save_idx <- if (!is.na(array_id)) array_id else i
+for (i in seq_len(nrow(conditions))) {
+  params <- conditions[i, ]
   
-  cat(sprintf("[%s] Condition %d: N=%d, Miss=%.2f, Dist=%s, Mech=%s\n", 
-              as.character(Sys.time()), save_idx, params$n, params$miss, params$dist, params$mech))
+  cat(sprintf("[%s] Condition %d/%d: N=%d, Miss=%.2f, Dist=%s, Mech=%s\n", 
+              as.character(Sys.time()), i, nrow(conditions), params$n, params$miss, params$dist, params$mech))
   
   # Static chunking (mc.preschedule=TRUE) ensures stable Copy-On-Write for 16GB RAM
   out_list <- mclapply(seq_len(n_sims), function(s) run_iteration(s, params), mc.cores = num_cores, mc.preschedule = TRUE)
@@ -249,10 +237,25 @@ for (i in seq_len(nrow(current_conditions))) {
       refined  = x$refined
     ))
     
-    saveRDS(results_df, sprintf("sim_results/results_cond_%d.rds", save_idx))
-    saveRDS(raw_data,   sprintf("sim_raw_data/raw_data_cond_%d.rds", save_idx))
+    saveRDS(results_df, sprintf("sim_results/results_cond_%d.rds", i))
+    saveRDS(raw_data,   sprintf("sim_raw_data/raw_data_cond_%d.rds", i))
+    
+    # Export Scatterplot Matrices for the first simulation of this condition
+    pdf(sprintf("sim_plots/plots_cond_%d.pdf", i), width = 12, height = 12)
+    par(mfrow = c(3, 2))
+    for (name in c("true", "miss", "imp_mice", "imp_mf", "refined")) {
+      d <- raw_data[[1]][[name]]
+      if (!is.null(d)) {
+        pairs(d[, 1:4], main = paste0("Condition ", i, ": ", name), col = rgb(0,0,0,0.2))
+      }
+    }
+    dev.off()
+    
+    # Explicit Cleanup to stay under 16GB
+    rm(results_df, raw_data, valid_out)
   }
   
+  rm(out_list)
   gc()
 }
 
