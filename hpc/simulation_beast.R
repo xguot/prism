@@ -10,8 +10,8 @@ library(missRanger)
 # Neutralize multi-threaded BLAS to prevent resource contention
 Sys.setenv(OMP_NUM_THREADS = "1", MKL_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1")
 
-# Local Execution Mode: 6 cores provides a safer buffer for 16GB RAM system
-num_cores <- min(6, parallel::detectCores() - 1)
+# Beast Mode: 14 cores provides optimized utilization on 16GB RAM system (~1.1GB per worker)
+num_cores <- min(14, parallel::detectCores() - 1)
 set.seed(20250523)
 
 # Simulation Grid Configuration
