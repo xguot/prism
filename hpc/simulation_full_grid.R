@@ -1,13 +1,15 @@
 # Simulation Study: Structural Recovery Benchmark (HPC Edition)
 # Evaluates the recovery of latent growth curve parameters, covariance
 # structures, and computational efficiency under MAR and MNAR mechanisms.
-#
 # Replicates the Data Generating Process (DGP) and deterministic
 # missingness thresholds from Tang & Tong (2025).
 
 library(MASS)
 library(smriti)
 library(parallel)
+
+# Neutralize multi-threaded BLAS to prevent contention during parallel forking
+Sys.setenv(OMP_NUM_THREADS = "1", MKL_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1")
 
 # Simulation Configuration
 set.seed(20250523)
@@ -19,7 +21,7 @@ grid_mech <- c("MAR", "MNAR")
 n_sims    <- 500
 t_points  <- 4
 
-# Ground Truth: Linear Growth Curve Parameters
+# Ground Truth Linear Growth Curve Parameters
 mu_i <- 6.0
 mu_s <- 2.0
 v_i  <- 1.0
@@ -36,7 +38,7 @@ for (r in 1:t_points) {
   }
 }
 
-# Helper: Calculate Frobenius Norm Distance
+# Helper Calculate Frobenius Norm Distance
 frob_dist <- function(m1, m2) {
   sqrt(sum((m1 - m2)^2))
 }
@@ -132,6 +134,13 @@ run_iteration <- function(sim_id, params) {
 
   df_true <- generate_data(params$n, params$dist)
   df_miss <- apply_missingness(df_true, params$miss, params$mech)
+
+  # Save Raw Data to Disk for Reproducibility
+  file_prefix <- sprintf("sim_raw_data/cond_N%d_M%.2f_D%s_M%s_sim%03d", 
+                         params$n, params$miss, params$dist, params$mech, sim_id)
+  
+  saveRDS(df_true, file = paste0(file_prefix, "_true.rds"))
+  saveRDS(df_miss, file = paste0(file_prefix, "_miss.rds"))
 
   gcm_mod <- "
     i =~ 1*T1 + 1*T2 + 1*T3 + 1*T4
@@ -303,8 +312,11 @@ if (!is.na(array_id)) {
 cat("Starting HPC Simulation Grid:", nrow(current_conditions), "conditions x", n_sims, "replications\n")
 cat("Total Iterations:", nrow(current_conditions) * n_sims, "\n\n")
 
-num_cores <- max(1, parallel::detectCores() - 1)
-cat("Parallel Execution Initialized across", num_cores, "cores\n\n")
+num_cores <- 10 # Strictly capped for 16GB RAM limit
+cat("Local Linux Execution Initialized across", num_cores, "cores\n\n")
+
+# Create raw data directory once before parallel execution begins
+dir.create("sim_raw_data", showWarnings = FALSE)
 
 all_results <- list()
 
@@ -314,17 +326,10 @@ for (i in seq_len(nrow(current_conditions))) {
   cat(sprintf("[%s] Running Condition %d/%d: N=%d, Miss=%.2f, Dist=%s, Mech=%s\n",
               Sys.time(), i, nrow(current_conditions), params$n, params$miss, params$dist, params$mech))
 
-  # Cross-platform parallelization via PSOCK cluster
-  cl <- makeCluster(num_cores)
-  clusterExport(cl, varlist = c("generate_data", "apply_missingness", "run_iteration", 
-                                "frob_dist", "true_cov", "t_points", "mu_i", "mu_s", 
-                                "v_i", "v_s", "c_is", "v_e"))
-  
-  res_cond <- parLapply(cl, seq_len(n_sims), function(sim_id) {
+  # Use Linux-native forking (mclapply) to drastically reduce RAM consumption
+  res_cond <- mclapply(seq_len(n_sims), function(sim_id) {
     run_iteration(sim_id, params)
-  })
-  
-  stopCluster(cl)
+  }, mc.cores = num_cores, mc.preschedule = TRUE)
 
   res_cond <- res_cond[sapply(res_cond, is.data.frame)]
 
@@ -335,7 +340,7 @@ for (i in seq_len(nrow(current_conditions))) {
     saveRDS(do.call(rbind, all_results), output_file)
   }
   
-  # Explicit garbage collection to prevent memory leaks in large arrays
+  # Explicit garbage collection
   rm(res_cond)
   gc()
 }
