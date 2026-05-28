@@ -32,6 +32,25 @@ arma::mat constrain_covariance(const arma::mat& X_imp,
   int n = X_opt.n_rows;
   arma::mat X_centered, Sigma_curr, grad_cov, update_step;
 
+  /* Strict PSD Guard: Ensure Sigma_target is positive semi-definite.
+   * Outliers in heavy distributions can occasionally cause precision issues
+   * that lead to negative eigenvalues, even if the R-side projected.
+   */
+  arma::vec eigval_t;
+  arma::mat eigvec_t;
+  if (arma::eig_sym(eigval_t, eigvec_t, Sigma_target)) {
+    bool has_neg = false;
+    for (uword j = 0; j < eigval_t.n_elem; j++) {
+      if (eigval_t(j) < 0) {
+        eigval_t(j) = 0;
+        has_neg = true;
+      }
+    }
+    if (has_neg) {
+      const_cast<arma::mat&>(Sigma_target) = eigvec_t * arma::diagmat(eigval_t) * eigvec_t.t();
+    }
+  }
+
   for (int i = 0; i < max_iter; i++) {
     /* check for user interrupt to allow Esc/Ctrl+C in R */
     Rcpp::checkUserInterrupt();

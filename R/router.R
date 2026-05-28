@@ -202,6 +202,38 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
     tol          = tol
   )
 
+  # Final PSD enforcement on the refined covariance manifold.
+  # Processing heavy outlier distributions can push the gradient descent
+  # into ill-conditioned territory. We ensure the final target remains
+  # strictly positive semi-definite to prevent variance collapse (negative
+  # slope variances) in structural equation models like lavaan.
+  sigma_refined_scaled <- stats::cov(x_refined_scaled)
+  sigma_psd_scaled <- nearest_psd(sigma_refined_scaled)
+
+  # If the projection was necessary, re-scale the imputed values slightly
+  # to match the PSD target. This is the "strict PSD projection" requested.
+  # We only apply this if the correction is non-trivial (>1e-9 Frobenius).
+  if (sqrt(sum((sigma_refined_scaled - sigma_psd_scaled)^2)) > 1e-9) {
+    # Coloring transform: X_new = X_old * S_old^-0.5 * S_psd^0.5
+    # We use eigen decomposition for stable matrix square root.
+    e_old <- eigen(sigma_refined_scaled, symmetric = TRUE)
+    e_new <- eigen(sigma_psd_scaled, symmetric = TRUE)
+
+    # Avoid division by zero for zero eigenvalues
+    d_old_inv <- ifelse(e_old$values > 1e-12, 1/sqrt(e_old$values), 0)
+    d_new     <- sqrt(e_new$values)
+
+    s_old_inv_sqrt <- e_old$vectors %*% diag(d_old_inv) %*% t(e_old$vectors)
+    s_new_sqrt     <- e_new$vectors %*% diag(d_new)     %*% t(e_new$vectors)
+
+    # Apply transform only to the imputed (hallucinated) values via the mask
+    # to avoid modifying observed data.
+    x_centered <- x_refined_scaled - rep(colMeans(x_refined_scaled), each = nrow(x_refined_scaled))
+    x_transformed <- (x_centered %*% s_old_inv_sqrt %*% s_new_sqrt) + rep(colMeans(x_refined_scaled), each = nrow(x_refined_scaled))
+
+    x_refined_scaled <- x_refined_scaled + (x_transformed - x_refined_scaled) * mask
+  }
+
   # Unscale the results back to original units
   x_refined <- t(t(x_refined_scaled) * col_sds + col_means)
 
