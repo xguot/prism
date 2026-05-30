@@ -7,9 +7,21 @@ library(missForest)
 # Neutralize multi-threaded BLAS to prevent resource contention during forking
 Sys.setenv(OMP_NUM_THREADS = "1", MKL_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1")
 
-# Tuning Mode: minimal core allocation for rapid iteration
-num_cores <- min(8, parallel::detectCores() - 1)
 set.seed(20250523)
+
+# ── Speed Toggle (must precede grid + core count) ────────────────────────────
+# "coarse"  — quick first pass (~20 min local): 3 N, 3 lambda, 100 reps
+# "full"    — proper tuning (~3 hr local):       5 N, 5 lambda, 200 reps
+tune_mode <- "coarse"
+
+# ── Core Allocation ──────────────────────────────────────────────────────────
+# mclapply forks lightweight R processes; peak RAM per worker at N=5000
+# is ~300 MB, so 14 workers on 16 GB is safe.
+num_cores <- if (tune_mode == "coarse") {
+  min(14, parallel::detectCores() - 1)
+} else {
+  min(12, parallel::detectCores() - 1)
+}
 
 # ── Tuning Grid ──────────────────────────────────────────────────────────────
 # Narrower than the production grid to keep iteration time low.
@@ -25,20 +37,6 @@ t_points    <- 4
 
 # Smriti hyperparameter candidates to evaluate against FIML
 grid_robust <- c(TRUE)
-
-# ── Speed Toggle ──────────────────────────────────────────────────────────────
-# "coarse"  — quick first pass (~30 min local): 3 N, 3 lambda, 100 reps
-# "full"    — proper tuning (~3 hr local):       5 N, 5 lambda, 200 reps
-tune_mode <- "coarse"
-if (tune_mode == "coarse") {
-  grid_n      <- c(200, 500, 5000)        # skip extremes, cover the range
-  grid_lambda <- c(0.1, 1.0, 5.0)         # low / default / high
-  n_sims      <- 100
-} else {
-  grid_n      <- c(100, 200, 500, 1000, 5000)
-  grid_lambda <- c(0.1, 0.5, 1.0, 2.0, 5.0)
-  n_sims      <- 200
-}
 
 # ── True Population Parameters ───────────────────────────────────────────────
 mu_i <- 6.0; mu_s <- 2.0; v_i <- 1.0; v_s <- 1.0; c_is <- 0.0; v_e <- 1.0
