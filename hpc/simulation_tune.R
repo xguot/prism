@@ -189,8 +189,10 @@ run_iteration <- function(sim_id, params) {
   }
 
   # ── Smriti variants (grid over lambda × robust) ─────────────────────────
-  for (lam in params$lambdas) {
-    for (rb in params$robusts) {
+  lambdas <- params$lambdas[[1]]
+  robusts <- params$robusts[[1]]
+  for (lam in lambdas) {
+    for (rb in robusts) {
       tag <- sprintf("Smriti_l%.2f_%s", lam, if (rb) "R" else "S")
       time_sm <- system.time({
         imp_sm <- tryCatch(
