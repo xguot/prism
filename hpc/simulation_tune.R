@@ -13,6 +13,15 @@ set.seed(20250523)
 # "coarse"  — quick first pass (~20 min local): 3 N, 3 lambda, 100 reps
 # "full"    — proper tuning (~3 hr local):       5 N, 5 lambda, 200 reps
 tune_mode <- "coarse"
+if (tune_mode == "coarse") {
+  grid_n      <- c(200, 500, 5000)
+  grid_lambda <- c(0.1, 1.0, 5.0)
+  n_sims      <- 100
+} else {
+  grid_n      <- c(100, 200, 500, 1000, 5000)
+  grid_lambda <- c(0.1, 0.5, 1.0, 2.0, 5.0)
+  n_sims      <- 200
+}
 
 # ── Core Allocation ──────────────────────────────────────────────────────────
 # mclapply forks lightweight R processes; peak RAM per worker at N=5000
