@@ -10,17 +10,19 @@ Sys.setenv(OMP_NUM_THREADS = "1", MKL_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = 
 set.seed(20250523)
 
 # ── Speed Toggle (must precede grid + core count) ────────────────────────────
-# "coarse"  — quick first pass (~20 min local): 3 N, 3 lambda, 100 reps
-# "full"    — proper tuning (~3 hr local):       5 N, 5 lambda, 200 reps
+# "coarse"  — quick pass (~1 hr local):   3 N, 5 lambda, 2 robust, 2 dist, 100 reps
+# "full"    — proper tuning (~6 hr local): 5 N, 7 lambda, 2 robust, 2 dist, 200 reps
 tune_mode <- "coarse"
 if (tune_mode == "coarse") {
   grid_n      <- c(200, 500, 5000)
-  grid_lambda <- c(0.1, 1.0, 5.0)
+  grid_lambda <- c(0.01, 0.05, 0.1, 1.0, 5.0)
   n_sims      <- 100
+  grid_dist   <- c("Lognormal", "Normal")
 } else {
   grid_n      <- c(100, 200, 500, 1000, 5000)
-  grid_lambda <- c(0.1, 0.5, 1.0, 2.0, 5.0)
+  grid_lambda <- c(0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0)
   n_sims      <- 200
+  grid_dist   <- c("Lognormal", "Normal")
 }
 
 # ── Core Allocation ──────────────────────────────────────────────────────────
@@ -33,19 +35,16 @@ num_cores <- if (tune_mode == "coarse") {
 }
 
 # ── Tuning Grid ──────────────────────────────────────────────────────────────
-# Narrower than the production grid to keep iteration time low.
-# FIML is the sole baseline — MICE, missForest, missRanger are excluded
-# to keep per-rep cost minimal.  The smriti Lagrangian step is ~0.02s per
-# variant, so sweeping 3-5 lambda values adds negligible overhead (~10%).
-# Switch dist to c("Normal", "Lognormal") for a two-point validation pass
-# after locking in candidate hyperparameters.
+# FIML is the sole baseline — MICE, missForest, missRanger are excluded.
+# The smriti Lagrangian step is ~0.02s per variant, so sweeping 5 lambda ×
+# 2 robust combinations adds only ~15% overhead over a single config.
+# grid_n, grid_lambda, n_sims, and grid_dist are set by the speed toggle above.
 grid_miss   <- c(0.05, 0.15, 0.30)
-grid_dist   <- c("Lognormal")          # primary stress test for FIML assumptions
 grid_mech   <- c("MAR", "MNAR")
 t_points    <- 4
 
 # Smriti hyperparameter candidates to evaluate against FIML
-grid_robust <- c(TRUE)
+grid_robust <- c(TRUE, FALSE)
 
 # ── True Population Parameters ───────────────────────────────────────────────
 mu_i <- 6.0; mu_s <- 2.0; v_i <- 1.0; v_s <- 1.0; c_is <- 0.0; v_e <- 1.0
