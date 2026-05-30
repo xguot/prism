@@ -8,3 +8,8 @@ tests/*.png
 src/*.o
 src/*.so
 src/*.dll
+sim_raw_data/
+sim_results/
+sim_plots/
+smriti.Rcheck/
+simulation.log
