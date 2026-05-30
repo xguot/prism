@@ -13,18 +13,32 @@ set.seed(20250523)
 
 # ── Tuning Grid ──────────────────────────────────────────────────────────────
 # Narrower than the production grid to keep iteration time low.
+# FIML is the sole baseline — MICE, missForest, missRanger are excluded
+# to keep per-rep cost minimal.  The smriti Lagrangian step is ~0.02s per
+# variant, so sweeping 3-5 lambda values adds negligible overhead (~10%).
 # Switch dist to c("Normal", "Lognormal") for a two-point validation pass
 # after locking in candidate hyperparameters.
-grid_n      <- c(100, 200, 500, 1000, 5000)
 grid_miss   <- c(0.05, 0.15, 0.30)
 grid_dist   <- c("Lognormal")          # primary stress test for FIML assumptions
 grid_mech   <- c("MAR", "MNAR")
-n_sims      <- 200                     # sufficient for tuning; bump to 500 for final
 t_points    <- 4
 
 # Smriti hyperparameter candidates to evaluate against FIML
-grid_lambda <- c(0.1, 0.5, 1.0, 2.0, 5.0)
 grid_robust <- c(TRUE)
+
+# ── Speed Toggle ──────────────────────────────────────────────────────────────
+# "coarse"  — quick first pass (~30 min local): 3 N, 3 lambda, 100 reps
+# "full"    — proper tuning (~3 hr local):       5 N, 5 lambda, 200 reps
+tune_mode <- "coarse"
+if (tune_mode == "coarse") {
+  grid_n      <- c(200, 500, 5000)        # skip extremes, cover the range
+  grid_lambda <- c(0.1, 1.0, 5.0)         # low / default / high
+  n_sims      <- 100
+} else {
+  grid_n      <- c(100, 200, 500, 1000, 5000)
+  grid_lambda <- c(0.1, 0.5, 1.0, 2.0, 5.0)
+  n_sims      <- 200
+}
 
 # ── True Population Parameters ───────────────────────────────────────────────
 mu_i <- 6.0; mu_s <- 2.0; v_i <- 1.0; v_s <- 1.0; c_is <- 0.0; v_e <- 1.0
@@ -234,7 +248,8 @@ if (!is.na(array_id) && array_id >= 1 && array_id <= total_conditions) {
 }
 
 # ── Execution ────────────────────────────────────────────────────────────────
-cat(sprintf("Tuning Mode: %d conditions × %d reps × %d variants = %d total rows\n",
+cat(sprintf("Speed Toggle: %s\n", tune_mode))
+cat(sprintf("Grid: %d conditions × %d reps × %d variants = %d total rows\n",
             total_conditions, n_sims, n_variants,
             total_conditions * n_sims * n_variants))
 cat(sprintf("Lambda grid: %s\n", paste(grid_lambda, collapse = ", ")))
