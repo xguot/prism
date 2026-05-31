@@ -39,8 +39,8 @@ nearest_psd <- function(mat) {
 #' @param lambda A numeric value specifying the per-observation penalty weight
 #'   on the covariance-constraint term.  The covariance gradient is deliberately
 #'   un-normalised (no division by n-1) so the constraint remains effective at
-#'   any sample size.  Defaults to 1.0.  Increase for higher-dimensional or
-#'   noisy targets; decrease for small samples.
+#'   any sample size.  Defaults to 0.1 (tuned via simulation for general use).
+#'   Increase for Gaussian data; decrease (e.g. 0.01) for heavy-tailed distributions.
 #' @param learning_rate A numeric value for the gradient descent step size.
 #'   Defaults to 0.001.
 #' @param tol A numeric value for the internal convergence tolerance
@@ -50,8 +50,9 @@ nearest_psd <- function(mat) {
 #' @param robust A logical value. Setting it to TRUE uses a robust target
 #'   constructed from pairwise Spearman correlations and column-wise MAD,
 #'   projected to the nearest positive-semidefinite matrix. This protects
-#'   against outliers and heavy-tailed noise at the cost of some asymptotic
-#'   efficiency under exact Gaussianity.
+#'   against outliers and heavy-tailed noise.  Defaults to FALSE (pairwise Pearson covariance).
+#'   Use TRUE when the data contains explicit outlier contamination
+#'   (e.g. sensor artifacts).
 #' @param custom_target An optional p x p covariance matrix (where p is the
 #'   number of longitudinal columns) to be used as the structural manifold.
 #'   If provided, `robust` and `sigma_target` calculations are bypassed.
@@ -73,8 +74,8 @@ nearest_psd <- function(mat) {
 #'
 #' @export
 smriti_impute <- function(data, time_cols, initial_imputation = NULL,
-                          lambda = 1.0, learning_rate = 0.001, tol = 1e-6,
-                          max_iter = 2000, robust = TRUE, custom_target = NULL) {
+                          lambda = 0.1, learning_rate = 0.001, tol = 1e-6,
+                          max_iter = 2000, robust = FALSE, custom_target = NULL) {
 
   # Type and dimension guards
   if (nrow(data) <= 1) {
