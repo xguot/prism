@@ -14,6 +14,9 @@ module purge
 module load goolf/11.4.0_4.1.4
 module load R/4.4.1
 
+# Local R library (no root access on Rivanna)
+export R_LIBS_USER=~/R/rivanna-lib
+
 # Ensure log directory exists
 mkdir -p hpc/logs
 
