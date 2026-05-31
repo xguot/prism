@@ -187,10 +187,10 @@ run_iteration <- function(sim_id, params) {
   })["elapsed"]
   res_list[[4]] <- make_row("missRanger", d_mr, s_var_mr, s_se_mr, unname(time_mr))
 
-  # ── Smriti: default (Pearson target, λ = 0.1) ────────────────────────────
+  # ── Smriti: default (Pearson target, λ = 1.0) ────────────────────────────
   time_sd <- system.time({
     imp_sd <- tryCatch(smriti_impute(df_miss, time_cols = 1:t_points,
-                       initial_imputation = imp_mf, lambda = 0.1, robust = FALSE),
+                       initial_imputation = imp_mf, lambda = 1.0, robust = FALSE),
                        error = function(e) NULL)
     s_var_sd <- NA; s_se_sd <- NA; d_sd <- NA
     if (!is.null(imp_sd)) {
@@ -201,10 +201,10 @@ run_iteration <- function(sim_id, params) {
   })["elapsed"]
   res_list[[5]] <- make_row("Smriti_Default", d_sd, s_var_sd, s_se_sd, unname(time_sd))
 
-  # ── Smriti: robust (Spearman + MAD target, λ = 0.1) ──────────────────────
+  # ── Smriti: robust (Spearman + MAD target, λ = 1.0) ──────────────────────
   time_sr <- system.time({
     imp_sr <- tryCatch(smriti_impute(df_miss, time_cols = 1:t_points,
-                       initial_imputation = imp_mf, lambda = 0.1, robust = TRUE),
+                       initial_imputation = imp_mf, lambda = 1.0, robust = TRUE),
                        error = function(e) NULL)
     s_var_sr <- NA; s_se_sr <- NA; d_sr <- NA
     if (!is.null(imp_sr)) {
