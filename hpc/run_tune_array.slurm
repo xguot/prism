@@ -22,7 +22,7 @@
 # Load Rivanna environment modules
 module purge
 module load goolf/11.4.0_4.1.4
-module load R/4.3.1
+module load R/4.4.1
 
 # Ensure log directory exists
 mkdir -p hpc/logs
