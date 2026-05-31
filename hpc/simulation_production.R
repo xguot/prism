@@ -121,7 +121,8 @@ run_iteration <- function(sim_id, params) {
     data.frame(sim_id = sim_id, N = params$n, miss = params$miss,
                dist = params$dist, mech = params$mech,
                method = method, f_dist = f_dist, s_var = s_var,
-               s_se = s_se, time_sec = time_sec)
+               s_var_bias = rel_bias(s_var, v_s), s_se = s_se,
+               time_sec = time_sec)
   }
   res_list <- list()
 
