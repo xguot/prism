@@ -1,3 +1,6 @@
+# Rivanna local library path (R_LIBS_USER may be ignored by site .Renviron)
+.libPaths(c("~/R/rivanna-lib", .libPaths()))
+
 library(MASS)
 library(smriti)
 library(parallel)
