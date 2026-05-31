@@ -219,24 +219,34 @@ run_iteration <- function(sim_id, params) {
   do.call(rbind, res_list)
 }
 
-# ── Execution ────────────────────────────────────────────────────────────────
-conditions <- expand.grid(n = grid_n, miss = grid_miss, dist = grid_dist,
-                          mech = grid_mech, stringsAsFactors = FALSE)
-total_conditions <- nrow(conditions)
+# ── SLURM Array Dispatch ─────────────────────────────────────────────────────
+# When running under a SLURM job array, each task processes exactly one
+# condition. Locally the full grid is processed sequentially.
+array_id <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
+if (!is.na(array_id) && array_id >= 1 && array_id <= total_conditions) {
+  current_conditions <- conditions[array_id, , drop = FALSE]
+  output_file <- sprintf("sim_results/prod_results_%d.rds", array_id)
+} else {
+  current_conditions <- conditions
+  output_file <- "sim_results/prod_results.rds"
+}
 
-cat(sprintf("Production Grid: %d conditions × %d reps × 6 methods = %d total rows\n",
+# ── Execution ────────────────────────────────────────────────────────────────
+cat(sprintf("Grid: %d conditions × %d reps × 6 methods = %d total rows\n",
             total_conditions, n_sims, total_conditions * n_sims * 6))
-cat(sprintf("Parallel cores: %d\n\n", num_cores))
+cat(sprintf("Parallel cores: %d\n", num_cores))
+cat(sprintf("Output: %s\n\n", output_file))
 
 dir.create("sim_results", showWarnings = FALSE)
 dir.create("sim_raw_data", showWarnings = FALSE)
 
 all_results <- list()
 
-for (i in seq_len(total_conditions)) {
-  params <- conditions[i, ]
+for (i in seq_len(nrow(current_conditions))) {
+  params <- current_conditions[i, ]
+  cond_idx <- if (!is.na(array_id)) array_id else i
   cat(sprintf("[%s] Condition %d/%d: N=%d, Miss=%.2f, Dist=%s, Mech=%s\n",
-              Sys.time(), i, total_conditions, params$n, params$miss,
+              Sys.time(), cond_idx, total_conditions, params$n, params$miss,
               params$dist, params$mech))
 
   out_list <- mclapply(seq_len(n_sims), function(s) run_iteration(s, params),
@@ -246,7 +256,7 @@ for (i in seq_len(total_conditions)) {
   if (length(valid) > 0) {
     cond_df <- do.call(rbind, valid)
     all_results[[i]] <- cond_df
-    saveRDS(do.call(rbind, all_results), sprintf("sim_results/prod_results.rds"))
+    saveRDS(do.call(rbind, all_results), output_file)
   }
 
   rm(out_list, valid)
