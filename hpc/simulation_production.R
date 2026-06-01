@@ -120,12 +120,12 @@ run_iteration <- function(sim_id, params) {
     i ~~ i
     s ~~ s
   "
-  make_row <- function(method, f_dist, s_var, s_se, time_sec) {
+  make_row <- function(method, f_dist, s_var, s_se, time_sec, pipeline_time = time_sec) {
     data.frame(sim_id = sim_id, N = params$n, miss = params$miss,
                dist = params$dist, mech = params$mech,
                method = method, f_dist = f_dist, s_var = s_var,
                s_var_bias = rel_bias(s_var, v_s), s_se = s_se,
-               time_sec = time_sec)
+               time_sec = time_sec, pipeline_time = pipeline_time)
   }
   res_list <- list()
 
@@ -188,6 +188,10 @@ run_iteration <- function(sim_id, params) {
   res_list[[4]] <- make_row("missRanger", d_mr, s_var_mr, s_se_mr, unname(time_mr))
 
   # ── Smriti: default (Pearson target, λ = 1.0) ────────────────────────────
+  # NOTE: smriti reuses missForest's output as initial_imputation so the
+  # Lagrangian routing benefit is measured in isolation.  time_sec captures
+  # only the routing step; pipeline_time includes the full end-to-end cost
+  # (missForest initialisation + smriti routing).
   time_sd <- system.time({
     imp_sd <- tryCatch(smriti_impute(df_miss, time_cols = 1:t_points,
                        initial_imputation = imp_mf, lambda = 1.0, robust = FALSE),
@@ -199,9 +203,13 @@ run_iteration <- function(sim_id, params) {
       s_var_sd <- sv["s_var"]; s_se_sd <- sv["s_se"]
     }
   })["elapsed"]
-  res_list[[5]] <- make_row("Smriti_Default", d_sd, s_var_sd, s_se_sd, unname(time_sd))
+  res_list[[5]] <- make_row("Smriti_Default", d_sd, s_var_sd, s_se_sd,
+                            unname(time_sd),
+                            pipeline_time = unname(time_mf) + unname(time_sd))
 
   # ── Smriti: robust (Spearman + MAD target, λ = 1.0) ──────────────────────
+  # NOTE: same missForest-initialisation dependency as Smriti_Default above.
+  # pipeline_time reflects the full end-to-end wall-clock cost.
   time_sr <- system.time({
     imp_sr <- tryCatch(smriti_impute(df_miss, time_cols = 1:t_points,
                        initial_imputation = imp_mf, lambda = 1.0, robust = TRUE),
@@ -213,7 +221,9 @@ run_iteration <- function(sim_id, params) {
       s_var_sr <- sv["s_var"]; s_se_sr <- sv["s_se"]
     }
   })["elapsed"]
-  res_list[[6]] <- make_row("Smriti_Robust", d_sr, s_var_sr, s_se_sr, unname(time_sr))
+  res_list[[6]] <- make_row("Smriti_Robust", d_sr, s_var_sr, s_se_sr,
+                            unname(time_sr),
+                            pipeline_time = unname(time_mf) + unname(time_sr))
 
   rm(df_true, df_miss, imp_mice, imp_mf, imp_mr, imp_sd, imp_sr)
   do.call(rbind, res_list)
