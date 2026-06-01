@@ -12,3 +12,4 @@
 ^[^/]*\.R$
 ^\.gitignore$
 ^\.Rbuildignore$
+^.*\.tar\.gz$
