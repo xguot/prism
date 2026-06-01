@@ -222,6 +222,10 @@ run_iteration <- function(sim_id, params) {
 # ── SLURM Array Dispatch ─────────────────────────────────────────────────────
 # When running under a SLURM job array, each task processes exactly one
 # condition. Locally the full grid is processed sequentially.
+conditions <- expand.grid(n = grid_n, miss = grid_miss, dist = grid_dist,
+                          mech = grid_mech, stringsAsFactors = FALSE)
+total_conditions <- nrow(conditions)
+
 array_id <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
 if (!is.na(array_id) && array_id >= 1 && array_id <= total_conditions) {
   current_conditions <- conditions[array_id, , drop = FALSE]
