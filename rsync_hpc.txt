@@ -17,9 +17,9 @@ rsync -avz --progress \
   --exclude='src/*.o' \
   --exclude='src/*.so' \
   ~/projects/smriti/ \
-  rivanna:~/projects/smriti/
+  rivanna:~/scratch/smriti/
 
 # After rsync, on Rivanna:
-#   cd ~/projects/smriti
+#   cd ~/scratch/smriti
 #   R CMD INSTALL .
 #   sbatch hpc/run_production_array.slurm
