@@ -18,17 +18,23 @@ num_cores <- min(24, parallel::detectCores() - 1)
 set.seed(20250523)
 
 # ── Simulation Grid ───────────────────────────────────────────────────────────
-grid_n    <- c(100, 200, 500, 1000, 5000)
-grid_miss <- c(0.05, 0.15, 0.30)
-grid_dist <- c("Normal", "Outlier", "Lognormal")
+# Aligned with Tang & Tong (UVA) manuscript:
+#   N       — 100, 200, 500, 1000, 5000, 10000
+#   miss    — 5%, 10%, 15%, 30%
+#   dist    — Normal, t(5), Outlier, Lognormal
+#   mech    — MAR, MNAR
+grid_n    <- c(100, 200, 500, 1000, 5000, 10000)
+grid_miss <- c(0.05, 0.10, 0.15, 0.30)
+grid_dist <- c("Normal", "t5", "Outlier", "Lognormal")
 grid_mech <- c("MAR", "MNAR")
 n_sims    <- 500
 t_points  <- 4
 
 # ── True Population Parameters ───────────────────────────────────────────────
+#   σ²_i = 1, σ²_s = 1, σ_is = 0, σ²_e = 1, μ_i = 6, μ_s = 2
 mu_i <- 6.0; mu_s <- 2.0; v_i <- 1.0; v_s <- 1.0; c_is <- 0.0; v_e <- 1.0
 
-# True population covariance matrix
+# True population covariance matrix (4 × 4)
 true_cov <- matrix(0, t_points, t_points)
 for (r in 1:t_points) {
   for (c in 1:t_points) {
@@ -39,7 +45,10 @@ for (r in 1:t_points) {
 
 # ── Metrics ──────────────────────────────────────────────────────────────────
 frob_dist <- function(m1, m2) sqrt(sum((m1 - m2)^2))
-rel_bias  <- function(est, truth) 100 * (est - truth) / truth
+rel_bias  <- function(est, truth) {
+  if (abs(truth) < 1e-12) return(est - truth)  # Tang & Tong: RB = raw bias when θ = 0
+  100 * (est - truth) / truth
+}
 
 # ── Data Generation Engine ───────────────────────────────────────────────────
 generate_data <- function(n, dist) {
@@ -56,6 +65,9 @@ generate_data <- function(n, dist) {
   for (j in 1:t_points) {
     err <- if (dist == "Lognormal") {
       scale(exp(rnorm(n))) * sqrt(v_e)
+    } else if (dist == "t5") {
+      # Student's t with 5 df, scaled to variance σ²_e = 1
+      rt(n, df = 5) * sqrt(v_e * (5 - 2) / 5)
     } else {
       rnorm(n, 0, sqrt(v_e))
     }
@@ -88,6 +100,7 @@ apply_missingness <- function(df, rate, mech) {
       }
     }
   } else if (mech == "MNAR") {
+    # Latent-slope-dependent dropout (Tang & Tong convention)
     cor_ab <- 0.8; a <- cor_ab / sqrt(1 - cor_ab^2)
     aux_var <- a * df$true_slope + rnorm(n, 0, 1)
     miss_rate_t <- 2 * rate / (t_points - 1)
@@ -101,7 +114,25 @@ apply_missingness <- function(df, rate, mech) {
   return(df_miss)
 }
 
-# ── Helper: fit growth model and extract slope variance ──────────────────────
+# ── Helper: extract GCM parameters from lavaan fit ────────────────────────────
+# Returns a named vector of 5 structural parameters:
+#   beta_L, beta_S, psi_L, psi_S, psi_LS
+extract_gcm_params <- function(fit) {
+  pt <- parameterEstimates(fit)
+  get_est <- function(lhs, op, rhs) {
+    row <- pt[pt$lhs == lhs & pt$op == op & pt$rhs == rhs, ]
+    if (nrow(row) > 0) row$est[1] else NA_real_
+  }
+  c(
+    beta_L = get_est("i", "~1", ""),
+    beta_S = get_est("s", "~1", ""),
+    psi_L  = get_est("i", "~~", "i"),
+    psi_S  = get_est("s", "~~", "s"),
+    psi_LS = get_est("i", "~~", "s")
+  )
+}
+
+# ── Helper: extract slope variance + SE ──────────────────────────────────────
 extract_slope_var <- function(data, gcm_mod) {
   fit <- tryCatch(growth(gcm_mod, data = data), error = function(e) NULL)
   if (is.null(fit)) return(c(s_var = NA, s_se = NA))
@@ -120,12 +151,29 @@ run_iteration <- function(sim_id, params) {
     i ~~ i
     s ~~ s
   "
-  make_row <- function(method, f_dist, s_var, s_se, time_sec, pipeline_time = time_sec) {
-    data.frame(sim_id = sim_id, N = params$n, miss = params$miss,
-               dist = params$dist, mech = params$mech,
-               method = method, f_dist = f_dist, s_var = s_var,
-               s_var_bias = rel_bias(s_var, v_s), s_se = s_se,
-               time_sec = time_sec, pipeline_time = pipeline_time)
+
+  make_row <- function(method, f_dist, s_var, s_se, time_sec,
+                       beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA,
+                       pipeline_time = time_sec) {
+    data.frame(
+      sim_id = sim_id, N = params$n, miss = params$miss,
+      dist = params$dist, mech = params$mech,
+      method    = method,
+      f_dist    = f_dist,
+      s_var     = s_var,
+      s_var_bias = rel_bias(s_var, v_s),
+      s_se      = s_se,
+      est_L     = beta_L,   est_S     = beta_S,
+      est_var_L = psi_L,    est_var_S = psi_S,    est_cov_LS = psi_LS,
+      bias_L    = rel_bias(beta_L, mu_i),
+      bias_S    = rel_bias(beta_S, mu_s),
+      bias_var_L  = rel_bias(psi_L,  v_i),
+      bias_var_S  = rel_bias(psi_S,  v_s),
+      bias_cov_LS = rel_bias(psi_LS, c_is),
+      time_sec     = time_sec,
+      pipeline_time = pipeline_time,
+      stringsAsFactors = FALSE
+    )
   }
   res_list <- list()
 
@@ -137,6 +185,7 @@ run_iteration <- function(sim_id, params) {
     fit_fiml <- tryCatch(growth(gcm_mod, data = df_miss, missing = "fiml"),
                          error = function(e) NULL)
     s_var_f <- NA; s_se_f <- NA; d_fiml <- NA
+    gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
     if (!is.null(fit_fiml)) {
       pt <- parameterEstimates(fit_fiml)
       row <- pt[pt$lhs == "s" & pt$op == "~~" & pt$rhs == "s", ]
@@ -144,48 +193,70 @@ run_iteration <- function(sim_id, params) {
       implied_cov <- tryCatch(lavaan::lavInspect(fit_fiml, "cov.ov"),
                               error = function(e) NULL)
       if (!is.null(implied_cov)) d_fiml <- frob_dist(implied_cov, true_cov)
+      gp <- extract_gcm_params(fit_fiml)
     }
   })["elapsed"]
-  res_list[[1]] <- make_row("FIML", d_fiml, s_var_f, s_se_f, unname(time_fiml))
+  res_list[[1]] <- make_row("FIML", d_fiml, s_var_f, s_se_f, unname(time_fiml),
+                            beta_L = gp["beta_L"], beta_S = gp["beta_S"],
+                            psi_L = gp["psi_L"], psi_S = gp["psi_S"],
+                            psi_LS = gp["psi_LS"])
 
   # ── MICE Baseline ─────────────────────────────────────────────────────────
   time_mice <- system.time({
     imp_mice <- tryCatch(mice::complete(mice::mice(df_miss, m = 1, method = "cart",
                           printFlag = FALSE), 1), error = function(e) NULL)
     s_var_m <- NA; s_se_m <- NA; d_m <- NA
+    gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
     if (!is.null(imp_mice)) {
       d_m <- frob_dist(stats::cov(imp_mice[, 1:t_points]), true_cov)
       sv <- extract_slope_var(imp_mice, gcm_mod)
       s_var_m <- sv["s_var"]; s_se_m <- sv["s_se"]
+      fit_m <- tryCatch(growth(gcm_mod, data = imp_mice), error = function(e) NULL)
+      if (!is.null(fit_m)) gp <- extract_gcm_params(fit_m)
     }
   })["elapsed"]
-  res_list[[2]] <- make_row("MICE", d_m, s_var_m, s_se_m, unname(time_mice))
+  res_list[[2]] <- make_row("MICE", d_m, s_var_m, s_se_m, unname(time_mice),
+                            beta_L = gp["beta_L"], beta_S = gp["beta_S"],
+                            psi_L = gp["psi_L"], psi_S = gp["psi_S"],
+                            psi_LS = gp["psi_LS"])
 
   # ── missForest Baseline ───────────────────────────────────────────────────
   time_mf <- system.time({
     imp_mf <- tryCatch(missForest::missForest(df_miss, verbose = FALSE)$ximp,
                        error = function(e) NULL)
     s_var_mf <- NA; s_se_mf <- NA; d_mf <- NA
+    gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
     if (!is.null(imp_mf)) {
       d_mf <- frob_dist(stats::cov(imp_mf[, 1:t_points]), true_cov)
       sv <- extract_slope_var(imp_mf, gcm_mod)
       s_var_mf <- sv["s_var"]; s_se_mf <- sv["s_se"]
+      fit_mf <- tryCatch(growth(gcm_mod, data = imp_mf), error = function(e) NULL)
+      if (!is.null(fit_mf)) gp <- extract_gcm_params(fit_mf)
     }
   })["elapsed"]
-  res_list[[3]] <- make_row("missForest", d_mf, s_var_mf, s_se_mf, unname(time_mf))
+  res_list[[3]] <- make_row("missForest", d_mf, s_var_mf, s_se_mf, unname(time_mf),
+                            beta_L = gp["beta_L"], beta_S = gp["beta_S"],
+                            psi_L = gp["psi_L"], psi_S = gp["psi_S"],
+                            psi_LS = gp["psi_LS"])
 
   # ── missRanger Baseline ───────────────────────────────────────────────────
   time_mr <- system.time({
     imp_mr <- tryCatch(missRanger::missRanger(df_miss, verbose = 0),
                        error = function(e) NULL)
     s_var_mr <- NA; s_se_mr <- NA; d_mr <- NA
+    gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
     if (!is.null(imp_mr)) {
       d_mr <- frob_dist(stats::cov(imp_mr[, 1:t_points]), true_cov)
       sv <- extract_slope_var(imp_mr, gcm_mod)
       s_var_mr <- sv["s_var"]; s_se_mr <- sv["s_se"]
+      fit_mr <- tryCatch(growth(gcm_mod, data = imp_mr), error = function(e) NULL)
+      if (!is.null(fit_mr)) gp <- extract_gcm_params(fit_mr)
     }
   })["elapsed"]
-  res_list[[4]] <- make_row("missRanger", d_mr, s_var_mr, s_se_mr, unname(time_mr))
+  res_list[[4]] <- make_row("missRanger", d_mr, s_var_mr, s_se_mr, unname(time_mr),
+                            beta_L = gp["beta_L"], beta_S = gp["beta_S"],
+                            psi_L = gp["psi_L"], psi_S = gp["psi_S"],
+                            psi_LS = gp["psi_LS"])
 
   # ── Smriti: default (Pearson target, λ = 1.0) ────────────────────────────
   # NOTE: smriti reuses missForest's output as initial_imputation so the
@@ -197,32 +268,42 @@ run_iteration <- function(sim_id, params) {
                        initial_imputation = imp_mf, lambda = 1.0, robust = FALSE),
                        error = function(e) NULL)
     s_var_sd <- NA; s_se_sd <- NA; d_sd <- NA
+    gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
     if (!is.null(imp_sd)) {
       d_sd <- frob_dist(stats::cov(imp_sd[, 1:t_points]), true_cov)
       sv <- extract_slope_var(imp_sd, gcm_mod)
       s_var_sd <- sv["s_var"]; s_se_sd <- sv["s_se"]
+      fit_sd <- tryCatch(growth(gcm_mod, data = imp_sd), error = function(e) NULL)
+      if (!is.null(fit_sd)) gp <- extract_gcm_params(fit_sd)
     }
   })["elapsed"]
   res_list[[5]] <- make_row("Smriti_Default", d_sd, s_var_sd, s_se_sd,
                             unname(time_sd),
+                            beta_L = gp["beta_L"], beta_S = gp["beta_S"],
+                            psi_L = gp["psi_L"], psi_S = gp["psi_S"],
+                            psi_LS = gp["psi_LS"],
                             pipeline_time = unname(time_mf) + unname(time_sd))
 
   # ── Smriti: robust (Spearman + MAD target, λ = 1.0) ──────────────────────
-  # NOTE: same missForest-initialisation dependency as Smriti_Default above.
-  # pipeline_time reflects the full end-to-end wall-clock cost.
   time_sr <- system.time({
     imp_sr <- tryCatch(smriti_impute(df_miss, time_cols = 1:t_points,
                        initial_imputation = imp_mf, lambda = 1.0, robust = TRUE),
                        error = function(e) NULL)
     s_var_sr <- NA; s_se_sr <- NA; d_sr <- NA
+    gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
     if (!is.null(imp_sr)) {
       d_sr <- frob_dist(stats::cov(imp_sr[, 1:t_points]), true_cov)
       sv <- extract_slope_var(imp_sr, gcm_mod)
       s_var_sr <- sv["s_var"]; s_se_sr <- sv["s_se"]
+      fit_sr <- tryCatch(growth(gcm_mod, data = imp_sr), error = function(e) NULL)
+      if (!is.null(fit_sr)) gp <- extract_gcm_params(fit_sr)
     }
   })["elapsed"]
   res_list[[6]] <- make_row("Smriti_Robust", d_sr, s_var_sr, s_se_sr,
                             unname(time_sr),
+                            beta_L = gp["beta_L"], beta_S = gp["beta_S"],
+                            psi_L = gp["psi_L"], psi_S = gp["psi_S"],
+                            psi_LS = gp["psi_LS"],
                             pipeline_time = unname(time_mf) + unname(time_sr))
 
   rm(df_true, df_miss, imp_mice, imp_mf, imp_mr, imp_sd, imp_sr)
@@ -230,8 +311,6 @@ run_iteration <- function(sim_id, params) {
 }
 
 # ── SLURM Array Dispatch ─────────────────────────────────────────────────────
-# When running under a SLURM job array, each task processes exactly one
-# condition. Locally the full grid is processed sequentially.
 conditions <- expand.grid(n = grid_n, miss = grid_miss, dist = grid_dist,
                           mech = grid_mech, stringsAsFactors = FALSE)
 total_conditions <- nrow(conditions)
@@ -277,4 +356,4 @@ for (i in seq_len(nrow(current_conditions))) {
   gc()
 }
 
-cat("\nProduction simulation complete. Results saved to sim_results/prod_results.rds\n")
+cat("\nProduction simulation complete. Results saved to ", output_file, "\n")

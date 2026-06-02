@@ -2,7 +2,7 @@
 #SBATCH -p standard
 #SBATCH -c 8
 #SBATCH -t 12:00:00
-#SBATCH --array=1-30
+#SBATCH --array=1-54
 #SBATCH -A tongx
 #SBATCH -J smriti_tune
 #SBATCH -o hpc/logs/tune_%A_%a.out
@@ -10,8 +10,8 @@
 #SBATCH --mem=16G
 
 # ── Tuning Array: rapid FIML-vs-Smriti hyperparameter sweep ─────────────────
-# Splits the 30-condition grid (5 N × 3 miss × 1 dist × 2 mech) across
-# 30 array tasks, one condition each. Each task loops over 5 lambda values
+# Splits the 54-condition coarse grid (3 N × 3 miss × 3 dist × 2 mech)
+# across 54 array tasks. Each task loops over 5 lambda × 2 robust values
 # internally, producing a single tune_results_<task>.rds file.
 #
 # After the array completes, aggregate with:

@@ -2,7 +2,7 @@
 #SBATCH -p standard
 #SBATCH -c 8
 #SBATCH -t 12:00:00
-#SBATCH --array=1-90
+#SBATCH --array=1-192
 #SBATCH -A tongx
 #SBATCH -J smriti_prod
 #SBATCH -o hpc/logs/prod_%A_%a.out

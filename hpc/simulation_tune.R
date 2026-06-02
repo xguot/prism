@@ -20,12 +20,12 @@ if (tune_mode == "coarse") {
   grid_n      <- c(200, 500, 5000)
   grid_lambda <- c(0.01, 0.05, 0.1, 1.0, 5.0)
   n_sims      <- 100
-  grid_dist   <- c("Lognormal", "Normal")
+  grid_dist   <- c("Normal", "t5", "Lognormal")
 } else {
   grid_n      <- c(100, 200, 500, 1000, 5000)
   grid_lambda <- c(0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0)
   n_sims      <- 200
-  grid_dist   <- c("Lognormal", "Normal")
+  grid_dist   <- c("Normal", "t5", "Lognormal")
 }
 
 # ── Core Allocation ──────────────────────────────────────────────────────────
@@ -66,7 +66,10 @@ for (r in 1:t_points) {
 frob_dist <- function(m1, m2) sqrt(sum((m1 - m2)^2))
 
 # Secondary diagnostic: relative bias (%) of a scalar estimate
-rel_bias <- function(est, truth) 100 * (est - truth) / truth
+rel_bias <- function(est, truth) {
+  if (abs(truth) < 1e-12) return(est - truth)
+  100 * (est - truth) / truth
+}
 
 # ── Data Generation Engine ───────────────────────────────────────────────────
 generate_data <- function(n, dist) {
@@ -85,6 +88,8 @@ generate_data <- function(n, dist) {
     # Error term: log-normal for the Lognormal condition, Gaussian otherwise
     err <- if (dist == "Lognormal") {
       scale(exp(rnorm(n))) * sqrt(v_e)
+    } else if (dist == "t5") {
+      rt(n, df = 5) * sqrt(v_e * (5 - 2) / 5)
     } else {
       rnorm(n, 0, sqrt(v_e))
     }
