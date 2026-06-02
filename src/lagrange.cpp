@@ -21,24 +21,33 @@ using namespace arma;
  *   lr           learning rate
  *   max_iter     maximum iterations
  *   tol          convergence tolerance (Frobenius norm)
+ *
+ * Returns a list with:
+ *   X_refined    n x p refined matrix
+ *   iterations   number of gradient descent iterations executed
+ *   converged    logical; TRUE if Frobenius norm fell below tol
+ *   final_frob   final Frobenius distance to target covariance
  */
 // [[Rcpp::export]]
-arma::mat constrain_covariance(const arma::mat& X_imp,
-                               const arma::mat& mask,
-                               const arma::mat& Sigma_target,
-                               double lambda, double lr, int max_iter, double tol) {
+Rcpp::List constrain_covariance(const arma::mat& X_imp,
+                                const arma::mat& mask,
+                                const arma::mat& Sigma_target,
+                                double lambda, double lr, int max_iter, double tol) {
 
   arma::mat X_opt = X_imp;
   int n = X_opt.n_rows;
   arma::mat X_centered, Sigma_curr, grad_cov, update_step;
 
-  /* Strict PSD Guard: Ensure Sigma_target is positive semi-definite.
-   * Outliers in heavy distributions can occasionally cause precision issues
-   * that lead to negative eigenvalues, even if the R-side projected.
+  /* Strict PSD Guard: Ensure the target is positive semi-definite.
+   * Copy to a local mutable matrix — modifying a const reference via
+   * const_cast is UB.  Outliers in heavy distributions can occasionally
+   * cause precision issues that lead to negative eigenvalues, even if
+   * the R-side already projected.
    */
+  arma::mat Sigma_fixed = Sigma_target;
   arma::vec eigval_t;
   arma::mat eigvec_t;
-  if (arma::eig_sym(eigval_t, eigvec_t, Sigma_target)) {
+  if (arma::eig_sym(eigval_t, eigvec_t, Sigma_fixed)) {
     bool has_neg = false;
     for (uword j = 0; j < eigval_t.n_elem; j++) {
       if (eigval_t(j) < 0) {
@@ -47,9 +56,13 @@ arma::mat constrain_covariance(const arma::mat& X_imp,
       }
     }
     if (has_neg) {
-      const_cast<arma::mat&>(Sigma_target) = eigvec_t * arma::diagmat(eigval_t) * eigvec_t.t();
+      Sigma_fixed = eigvec_t * arma::diagmat(eigval_t) * eigvec_t.t();
     }
   }
+
+  int iter = 0;
+  bool converged = false;
+  double final_frob = -1.0;
 
   for (int i = 0; i < max_iter; i++) {
     /* check for user interrupt to allow Esc/Ctrl+C in R */
@@ -59,11 +72,16 @@ arma::mat constrain_covariance(const arma::mat& X_imp,
     X_centered = X_opt.each_row() - arma::mean(X_opt, 0);
     Sigma_curr = (X_centered.t() * X_centered) / (n - 1.0);
 
-    /* convergence check (post-update) */
-    if (arma::norm(Sigma_curr - Sigma_target, "fro") < tol) break;
+    /* convergence check (Frobenius distance to target) */
+    final_frob = arma::norm(Sigma_curr - Sigma_fixed, "fro");
+    iter = i + 1;
+    if (final_frob < tol) {
+      converged = true;
+      break;
+    }
 
     /* covariance-constraint gradient (un-normalised) */
-    grad_cov = 2.0 * X_centered * (Sigma_curr - Sigma_target);
+    grad_cov = 2.0 * X_centered * (Sigma_curr - Sigma_fixed);
     update_step = (lr * lambda) * grad_cov;
 
     /* gradient step (masked: only update originally-missing cells) */
@@ -75,5 +93,10 @@ arma::mat constrain_covariance(const arma::mat& X_imp,
     }
   }
 
-  return X_opt;
+  return Rcpp::List::create(
+    Rcpp::Named("X_refined")  = X_opt,
+    Rcpp::Named("iterations") = iter,
+    Rcpp::Named("converged")  = converged,
+    Rcpp::Named("final_frob") = final_frob
+  );
 }

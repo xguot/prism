@@ -12,7 +12,7 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // constrain_covariance
-arma::mat constrain_covariance(const arma::mat& X_imp, const arma::mat& mask, const arma::mat& Sigma_target, double lambda, double lr, int max_iter, double tol);
+Rcpp::List constrain_covariance(const arma::mat& X_imp, const arma::mat& mask, const arma::mat& Sigma_target, double lambda, double lr, int max_iter, double tol);
 RcppExport SEXP _smriti_constrain_covariance(SEXP X_impSEXP, SEXP maskSEXP, SEXP Sigma_targetSEXP, SEXP lambdaSEXP, SEXP lrSEXP, SEXP max_iterSEXP, SEXP tolSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;

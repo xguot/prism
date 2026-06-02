@@ -39,8 +39,9 @@ nearest_psd <- function(mat) {
 #' @param lambda A numeric value specifying the per-observation penalty weight
 #'   on the covariance-constraint term.  The covariance gradient is deliberately
 #'   un-normalised (no division by n-1) so the constraint remains effective at
-#'   any sample size.  Defaults to 0.1 (tuned via simulation for general use).
-#'   Increase for Gaussian data; decrease (e.g. 0.01) for heavy-tailed distributions.
+#'   any sample size.  Defaults to 1.0 (tuned via simulation for general use).
+#'   Use lower values (e.g. 0.01) for clean Normal data; increase for
+#'   stronger constraint enforcement.
 #' @param learning_rate A numeric value for the gradient descent step size.
 #'   Defaults to 0.001.
 #' @param tol A numeric value for the internal convergence tolerance
@@ -74,7 +75,7 @@ nearest_psd <- function(mat) {
 #'
 #' @export
 smriti_impute <- function(data, time_cols, initial_imputation = NULL,
-                          lambda = 0.1, learning_rate = 0.001, tol = 1e-6,
+                          lambda = 1.0, learning_rate = 0.001, tol = 1e-6,
                           max_iter = 2000, robust = FALSE, custom_target = NULL) {
 
   # Type and dimension guards
@@ -193,7 +194,7 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
   sigma_scaled <- scaling_mat %*% sigma_target %*% scaling_mat
 
   # C++ Lagrangian projection
-  x_refined_scaled <- constrain_covariance(
+  cpp_result <- constrain_covariance(
     X_imp        = x_scaled,
     mask         = mask,
     Sigma_target = sigma_scaled,
@@ -202,6 +203,7 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
     max_iter     = max_iter,
     tol          = tol
   )
+  x_refined_scaled <- cpp_result$X_refined
 
   # Final PSD enforcement on the refined covariance manifold.
   # Processing heavy outlier distributions can push the gradient descent
@@ -244,6 +246,14 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
   initial_dist <- sqrt(sum((initial_cov - sigma_target)^2))
   final_dist   <- sqrt(sum((final_cov   - sigma_target)^2))
   improvement  <- initial_dist - final_dist
+
+  if (!cpp_result$converged) {
+    warning(sprintf(
+      "C++ gradient descent did not converge in %d iterations. ",
+      cpp_result$iterations
+    ), "Final Frobenius distance to target: ", format(cpp_result$final_frob, digits = 3),
+    ". Consider increasing max_iter or adjusting lambda.")
+  }
 
   if (final_dist > tol) {
     warning(sprintf("Covariance projection did not reach tolerance. Final Dist: %.4e (Tol: %.4e).",
