@@ -11,5 +11,6 @@ src/*.dll
 sim_raw_data/
 sim_results/
 sim_plots/
+manuscript_figures/
 smriti.Rcheck/
 simulation.log
