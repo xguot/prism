@@ -1,0 +1,25 @@
+# rsync smriti to Rivanna HPC — excludes .git, old sim results, generated figures
+#
+# Usage:
+#   sh rsync_hpc.txt
+#   or copy the command below.
+
+rsync -avz --progress \
+  --exclude='.git' \
+  --exclude='.deepseek' \
+  --exclude='sim_results' \
+  --exclude='sim_raw_data' \
+  --exclude='manuscript_figures' \
+  --exclude='..Rcheck' \
+  --exclude='.Rhistory' \
+  --exclude='.RData' \
+  --exclude='.Ruserdata' \
+  --exclude='src/*.o' \
+  --exclude='src/*.so' \
+  ~/projects/smriti/ \
+  rivanna:~/projects/smriti/
+
+# After rsync, on Rivanna:
+#   cd ~/projects/smriti
+#   R CMD INSTALL .
+#   sbatch hpc/run_production_array.slurm
