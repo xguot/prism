@@ -50,7 +50,7 @@ scale_method_aes <- list(
 )
 
 dist_levels  <- c("Normal", "t5", "Outlier", "Lognormal")
-dist_labels  <- c("Normal", "Student's t(5)", "5% Outliers", "Lognormal")
+dist_labels  <- c("Normal", "Student t(5)", "5% Outliers", "Lognormal")
 miss_levels  <- c("5%", "10%", "15%", "30%")
 N_levels     <- c("N = 100", "N = 200", "N = 500", "N = 1k", "N = 5k", "N = 10k")
 
@@ -278,7 +278,7 @@ ggsave("manuscript_figures/fig6_timing.png",
 cat("Figure 7: Heavy-tailed (t5) Comparison (MAR)\n")
 
 fig7 <- agg %>%
-  filter(mech == "MAR", dist %in% c("Normal", "Student's t(5)"))
+  filter(mech == "MAR", dist %in% c("Normal", "Student t(5)"))
 
 p7 <- ggplot(fig7, aes(x = N, y = f_dist_mean, group = method)) +
   geom_line(aes(linetype = method, color = method), linewidth = 0.6) +
