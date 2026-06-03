@@ -198,22 +198,25 @@ bias_long <- agg %>%
 p4 <- ggplot(bias_long, aes(x = N, y = abs(Bias), group = method)) +
   geom_hline(yintercept = 10, linetype = "dashed", color = "grey50", linewidth = 0.4) +
   geom_line(aes(linetype = method, color = method), linewidth = 0.6) +
-  geom_point(aes(color = method), size = 1.2) +
+  geom_point(aes(color = method), size = 1.0) +
   scale_x_log10(
     breaks = c(100, 200, 500, 1000, 5000, 10000),
     labels = c("100", "200", "500", "1k", "5k", "10k")
   ) +
   scale_method_aes +
-  facet_grid(dist ~ Parameter, labeller = labeller(Parameter = label_parsed, dist = label_value)) +
+  facet_wrap(dist ~ Parameter, scales = "free_y", ncol = 5,
+             labeller = labeller(Parameter = label_parsed, dist = label_value,
+                                 .multi_line = FALSE)) +
   labs(x = "Sample Size (N)",
        y = "|Relative Bias| (%)",
-       subtitle = "Dashed line: 10% acceptable bias threshold.  15% missingness, MAR.") +
-  theme_smriti()
+       subtitle = "Each panel has its own y-axis.  Dashed line: 10% acceptable bias.  15% miss, MAR.") +
+  theme_smriti(legend_pos = "bottom") +
+  theme(strip.text = element_text(size = 7))
 
 ggsave("manuscript_figures/fig4_parameter_bias.pdf",
-       plot = p4, width = 30, height = 18, units = "cm")
+       plot = p4, width = 35, height = 22, units = "cm")
 ggsave("manuscript_figures/fig4_parameter_bias.png",
-       plot = p4, width = 30, height = 18, units = "cm", dpi = 300)
+       plot = p4, width = 35, height = 22, units = "cm", dpi = 300)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # FIGURE 5 — Slope Variance Bias (MAR)
@@ -299,4 +302,55 @@ ggsave("manuscript_figures/fig7_t5_comparison.pdf",
 ggsave("manuscript_figures/fig7_t5_comparison.png",
        plot = p7, width = 27, height = 12, units = "cm", dpi = 300)
 
-cat("\nAll 7 figures saved to manuscript_figures/\n")
+# ══════════════════════════════════════════════════════════════════════════════
+# FIGURE 8 — MNAR: Frobenius Distance by Sample Size
+# ══════════════════════════════════════════════════════════════════════════════
+cat("Figure 8: MNAR Frobenius Distance by Sample Size\n")
+
+fig8 <- agg %>% filter(mech == "MNAR")
+
+p8 <- ggplot(fig8, aes(x = N, y = f_dist_mean, group = method)) +
+  geom_line(aes(linetype = method, color = method), linewidth = 0.6) +
+  geom_point(aes(color = method), size = 1.5) +
+  scale_x_log10(
+    breaks = c(100, 200, 500, 1000, 5000, 10000),
+    labels = c("100", "200", "500", "1k", "5k", "10k")
+  ) +
+  scale_method_aes +
+  facet_grid(dist ~ miss_pct) +
+  labs(x = "Sample Size (N)",
+       y = "Frobenius Distance to True Covariance",
+       subtitle = "MNAR: all methods degrade.  Smriti is not worse than competitors.") +
+  theme_smriti()
+
+ggsave("manuscript_figures/fig8_mnar_frobenius.pdf",
+       plot = p8, width = 27, height = 18, units = "cm")
+ggsave("manuscript_figures/fig8_mnar_frobenius.png",
+       plot = p8, width = 27, height = 18, units = "cm", dpi = 300)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FIGURE 9 — MNAR: Slope Variance Bias
+# ══════════════════════════════════════════════════════════════════════════════
+cat("Figure 9: MNAR Slope Variance Bias\n")
+
+p9 <- ggplot(fig8, aes(x = N, y = s_var_bias_mean, group = method)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50", linewidth = 0.4) +
+  geom_line(aes(linetype = method, color = method), linewidth = 0.6) +
+  geom_point(aes(color = method), size = 1.5) +
+  scale_x_log10(
+    breaks = c(100, 200, 500, 1000, 5000, 10000),
+    labels = c("100", "200", "500", "1k", "5k", "10k")
+  ) +
+  scale_method_aes +
+  facet_grid(dist ~ miss_pct) +
+  labs(x = "Sample Size (N)",
+       y = expression("Bias in Recovered " * sigma[s]^2 * " (%)"),
+       subtitle = "MNAR: negative bias across all methods.  FIML is the least biased.") +
+  theme_smriti()
+
+ggsave("manuscript_figures/fig9_mnar_slope_bias.pdf",
+       plot = p9, width = 27, height = 18, units = "cm")
+ggsave("manuscript_figures/fig9_mnar_slope_bias.png",
+       plot = p9, width = 27, height = 18, units = "cm", dpi = 300)
+
+cat("\nAll 9 figures saved to manuscript_figures/\n")
