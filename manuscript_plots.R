@@ -203,7 +203,7 @@ p4 <- ggplot(bias_long, aes(x = N, y = abs(Bias), group = method)) +
     labels = c("100", "200", "500", "1k", "5k", "10k")
   ) +
   scale_method_aes +
-  facet_grid(dist ~ Parameter, labeller = label_parsed) +
+  facet_grid(dist ~ Parameter, labeller = labeller(Parameter = label_parsed, dist = label_value)) +
   labs(x = "Sample Size (N)",
        y = "|Relative Bias| (%)",
        subtitle = "Dashed line: 10% acceptable bias threshold.  15% missingness, MAR.") +
