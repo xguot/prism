@@ -10,7 +10,7 @@ library(dplyr)
 library(tidyr)
 
 # ── Shared plot theme (plot_demo convention) ──────────────────────────────────
-theme_smriti <- function(legend_pos = c(0.85, 0.75)) {
+theme_smriti <- function(legend_pos = "bottom") {
   theme_bw() +
     theme(
       legend.position      = legend_pos,
@@ -20,7 +20,8 @@ theme_smriti <- function(legend_pos = c(0.85, 0.75)) {
       strip.text           = element_text(size = 9, face = "bold"),
       axis.title           = element_text(size = 10),
       axis.text            = element_text(size = 8),
-      panel.grid.minor     = element_blank()
+      panel.grid.minor     = element_blank(),
+      legend.direction     = "horizontal"
     )
 }
 
