@@ -4,13 +4,15 @@
 \alias{smriti_mice}
 \title{mice-Smriti Refinement Wrapper}
 \usage{
-smriti_mice(data, time_cols, ...)
+smriti_mice(data, time_cols, robust = TRUE, ...)
 }
 \arguments{
 \item{data}{A data frame containing missing values.}
 
 \item{time_cols}{A character vector or numeric vector specifying the
 longitudinal columns.}
+
+\item{robust}{A logical value. If TRUE (default), uses robust covariance estimation.}
 
 \item{...}{Additional arguments passed directly to \code{\link[mice:mice]{mice::mice()}}.}
 }

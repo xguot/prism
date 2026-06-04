@@ -36,8 +36,10 @@ nearest_psd <- function(mat) {
 #' @param initial_imputation A matrix or data frame of the same dimensions as
 #'   `data[, time_cols]`, containing initial imputed values. If `NULL`, a simple
 #'   column-mean imputation is performed as a fallback.
-#' @param lambda A numeric value specifying the per-observation penalty weight
-#'   on the covariance-constraint term.  The covariance gradient is deliberately
+#' @param lambda A numeric value or "auto" specifying the per-observation
+#'   penalty weight on the covariance-constraint term. If "auto", a simple
+#'   heuristic is used based on the Frobenius norm between initial and
+#'   target covariance. The covariance gradient is deliberately
 #'   un-normalised (no division by n-1) so the constraint remains effective at
 #'   any sample size.  Defaults to 1.0 (tuned via simulation for general use).
 #'   Use lower values (e.g. 0.01) for clean Normal data; increase for
@@ -165,6 +167,15 @@ smriti_impute <- function(data, time_cols, initial_imputation = NULL,
   # Pairwise completeness guard: check for NA in covariance (no overlapping obs)
   if (any(is.na(sigma_target))) {
     stop("Target covariance contains NAs. Some column pairs have no overlapping observed data.")
+  }
+
+  # Lambda heuristic: "auto"
+  if (is.character(lambda) && lambda == "auto") {
+    initial_cov <- stats::cov(x_hallucinated)
+    # Heuristic: Frobenius norm of the difference, scaled by 10.0
+    lambda <- norm(initial_cov - sigma_target, type = "F") / 10.0
+    # Guard against extreme values
+    lambda <- max(min(lambda, 10.0), 0.1)
   }
 
   # validate target conditioning

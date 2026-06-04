@@ -12,7 +12,7 @@ smriti_impute(
   learning_rate = 0.001,
   tol = 1e-06,
   max_iter = 2000,
-  robust = TRUE,
+  robust = FALSE,
   custom_target = NULL
 )
 }
@@ -26,11 +26,14 @@ longitudinal columns.}
 \code{data[, time_cols]}, containing initial imputed values. If \code{NULL}, a simple
 column-mean imputation is performed as a fallback.}
 
-\item{lambda}{A numeric value specifying the per-observation penalty weight
-on the covariance-constraint term.  The covariance gradient is deliberately
+\item{lambda}{A numeric value or "auto" specifying the per-observation
+penalty weight on the covariance-constraint term. If "auto", a simple
+heuristic is used based on the Frobenius norm between initial and
+target covariance. The covariance gradient is deliberately
 un-normalised (no division by n-1) so the constraint remains effective at
-any sample size.  Defaults to 1.0.  Increase for higher-dimensional or
-noisy targets; decrease for small samples.}
+any sample size.  Defaults to 1.0 (tuned via simulation for general use).
+Use lower values (e.g. 0.01) for clean Normal data; increase for
+stronger constraint enforcement.}
 
 \item{learning_rate}{A numeric value for the gradient descent step size.
 Defaults to 0.001.}
@@ -44,8 +47,9 @@ for the gradient descent projection. Defaults to 2000.}
 \item{robust}{A logical value. Setting it to TRUE uses a robust target
 constructed from pairwise Spearman correlations and column-wise MAD,
 projected to the nearest positive-semidefinite matrix. This protects
-against outliers and heavy-tailed noise at the cost of some asymptotic
-efficiency under exact Gaussianity.}
+against outliers and heavy-tailed noise.  Defaults to FALSE (pairwise Pearson covariance).
+Use TRUE when the data contains explicit outlier contamination
+(e.g. sensor artifacts).}
 
 \item{custom_target}{An optional p x p covariance matrix (where p is the
 number of longitudinal columns) to be used as the structural manifold.
