@@ -15,7 +15,9 @@ Sys.setenv(OMP_NUM_THREADS = "1", MKL_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = 
 
 # Core allocation for production run
 num_cores <- min(24, parallel::detectCores() - 1)
-set.seed(20250523)
+array_id <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
+seed_base <- 20250523
+set.seed(if (is.na(array_id)) seed_base else seed_base + array_id)
 
 # ── Simulation Grid ───────────────────────────────────────────────────────────
 # Aligned with Tang & Tong (UVA) manuscript:
