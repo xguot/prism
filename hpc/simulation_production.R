@@ -68,13 +68,13 @@ generate_data <- function(n, dist) {
       rnorm(n, 0, sqrt(v_e))
     }
 
-    data_mat[, j] <- latent_vars[, 1] + (j - 1) * latent_vars[, 2] + err
-  }
+    if (dist == "Outlier") {
+      # Occasion-specific measurement error outliers (5%)
+      out_idx <- sample(seq_len(n), floor(0.05 * n))
+      err[out_idx] <- err[out_idx] + 5.0
+    }
 
-  if (dist == "Outlier") {
-    # Subject-level measurement error outliers (5%)
-    idx <- sample(seq_len(n), floor(0.05 * n))
-    data_mat[idx, ] <- data_mat[idx, ] + 5.0
+    data_mat[, j] <- latent_vars[, 1] + (j - 1) * latent_vars[, 2] + err
   }
 
   df <- as.data.frame(data_mat)
