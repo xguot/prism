@@ -55,12 +55,6 @@ generate_data <- function(n, dist) {
   latent_vars <- mvrnorm(n, mu = c(mu_i, mu_s),
                          Sigma = matrix(c(v_i, c_is, c_is, v_s), 2, 2))
 
-  if (dist == "Lognormal") {
-    latent_vars <- exp(latent_vars)
-    latent_vars[,1] <- scale(latent_vars[,1]) * sqrt(v_i) + mu_i
-    latent_vars[,2] <- scale(latent_vars[,2]) * sqrt(v_s) + mu_s
-  }
-
   data_mat <- matrix(0, n, t_points)
   for (j in 1:t_points) {
     err <- if (dist == "Lognormal") {
@@ -71,12 +65,14 @@ generate_data <- function(n, dist) {
     } else {
       rnorm(n, 0, sqrt(v_e))
     }
-    data_mat[, j] <- latent_vars[, 1] + (j - 1) * latent_vars[, 2] + err
-  }
 
-  if (dist == "Outlier") {
-    idx <- sample(seq_len(n), floor(0.05 * n))
-    data_mat[idx, ] <- data_mat[idx, ] + 5.0
+    if (dist == "Outlier") {
+      # Occasion-specific measurement error outliers (5%)
+      out_idx <- sample(seq_len(n), floor(0.05 * n))
+      err[out_idx] <- err[out_idx] + 5.0
+    }
+
+    data_mat[, j] <- latent_vars[, 1] + (j - 1) * latent_vars[, 2] + err
   }
 
   df <- as.data.frame(data_mat)
