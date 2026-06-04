@@ -1,6 +1,6 @@
 ^CRAN-SUBMISSION$
 ^cran-comments\.md$
-^hpc/
+^hpc$
 ^tests/simulation_results\.rds$
 ^\.Rcheck/
 ^smriti\.Rcheck/
@@ -13,3 +13,8 @@
 ^\.gitignore$
 ^\.Rbuildignore$
 ^.*\.tar\.gz$
+^manuscript_figures$
+^sim_results$
+^sim_raw_data$
+^manuscript_plots\.R$
+^manuscript_analysis\.R$
