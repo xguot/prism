@@ -86,13 +86,26 @@ apply_missingness <- function(df, rate, mech) {
   df_miss <- df; n <- nrow(df)
 
   if (mech == "MAR") {
+    # Deterministic threshold MAR (Tang & Tong 2025 convention)
+    # Low values on T_t cause missingness on T_{t+1}
+    miss_n_per_step <- round(2 * n * rate / (t_points - 1))
+
     for (t in 1:(t_points - 1)) {
-      idx <- which(!is.na(df_miss[, t]))
-      if (length(idx) > 0) {
-        x_prev <- scale(df_miss[idx, t])
-        p_miss <- 1 / (1 + exp(-(x_prev - qnorm(1 - rate))))
-        drop_idx <- idx[rbinom(length(idx), 1, p_miss) == 1]
-        df_miss[drop_idx, (t + 1)] <- NA
+      # Identify subjects not already dropped at previous timepoints
+      obs_idx <- which(!is.na(df_miss[, t]))
+      if (length(obs_idx) > 0) {
+        # Sort observed values: smallest values are at the end if decreasing=TRUE?
+        # Actually, image says: order(..., decreasing=TRUE), target_rows <- (n - t*miss_n + 1):n
+        # That targets the smallest values.
+        order_idx <- order(df_miss[, t], decreasing = TRUE)
+        # Calculate how many to drop this step (linear accumulation)
+        target_rows <- (n - t * miss_n_per_step + 1):n
+        target_rows <- target_rows[target_rows > 0 & target_rows <= n]
+
+        if (length(target_rows) > 0) {
+          drop_idx <- order_idx[target_rows]
+          df_miss[drop_idx, (t + 1):t_points] <- NA # Dropout: once missing, stay missing
+        }
       }
     }
   } else if (mech == "MNAR") {
@@ -106,8 +119,9 @@ apply_missingness <- function(df, rate, mech) {
     }
   }
 
+  actual_miss <- mean(is.na(df_miss[, 1:t_points]))
   df_miss$true_slope <- NULL
-  return(df_miss)
+  return(list(data = df_miss, actual_miss = actual_miss))
 }
 
 # ── Helper: pool multiple imputation results via Rubin's rules ────────────────
@@ -166,6 +180,7 @@ run_iteration <- function(sim_id, params) {
                        pipeline_time = time_sec) {
     data.frame(
       sim_id = sim_id, N = params$n, miss = params$miss,
+      actual_miss = act_m,
       dist = params$dist, mech = params$mech,
       method    = method,
       f_dist    = f_dist,
@@ -187,7 +202,9 @@ run_iteration <- function(sim_id, params) {
   res_list <- list()
 
   df_true <- generate_data(params$n, params$dist)
-  df_miss <- apply_missingness(df_true, params$miss, params$mech)
+  miss_out <- apply_missingness(df_true, params$miss, params$mech)
+  df_miss <- miss_out$data
+  act_m   <- miss_out$actual_miss
 
   # ── FIML Baseline ────────────────────────────────────────────────────────
   time_fiml <- system.time({
