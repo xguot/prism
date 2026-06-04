@@ -57,12 +57,6 @@ generate_data <- function(n, dist) {
   latent_vars <- mvrnorm(n, mu = c(mu_i, mu_s),
                          Sigma = matrix(c(v_i, c_is, c_is, v_s), 2, 2))
 
-  if (dist == "Lognormal") {
-    latent_vars <- exp(latent_vars)
-    latent_vars[, 1] <- scale(latent_vars[, 1]) * sqrt(v_i) + mu_i
-    latent_vars[, 2] <- scale(latent_vars[, 2]) * sqrt(v_s) + mu_s
-  }
-
   data_mat <- matrix(0, n, t_points)
   for (j in 1:t_points) {
     err <- if (dist == "Lognormal") {
@@ -235,9 +229,9 @@ run_iteration <- function(sim_id, params) {
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"])
 
-  # ── MICE Baseline (MI m=5) ──────────────────────────────────────────────────
+  # ── MICE Baseline (MI m=20) ─────────────────────────────────────────────────
   time_mice <- system.time({
-    m_mice <- 5
+    m_mice <- 20
     imp_mice_list <- tryCatch({
       imp_obj <- mice::mice(df_miss, m = m_mice, method = "cart", printFlag = FALSE)
       mice::complete(imp_obj, "all")
