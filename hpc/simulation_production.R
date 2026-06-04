@@ -110,21 +110,34 @@ apply_missingness <- function(df, rate, mech) {
   return(df_miss)
 }
 
+# ── Helper: pool multiple imputation results via Rubin's rules ────────────────
+pool_rubin <- function(ests, ses) {
+  m <- length(ests)
+  if (m == 0) return(c(est = NA_real_, se = NA_real_))
+  if (m == 1) return(c(est = ests[1], se = ses[1]))
+
+  mean_est <- mean(ests, na.rm = TRUE)
+  vw <- mean(ses^2, na.rm = TRUE)
+  vb <- var(ests, na.rm = TRUE)
+  total_var <- vw + (1 + 1/m) * vb
+  c(est = mean_est, se = sqrt(total_var))
+}
+
 # ── Helper: extract GCM parameters from lavaan fit ────────────────────────────
 # Returns a named vector of 5 structural parameters:
 #   beta_L, beta_S, psi_L, psi_S, psi_LS
-extract_gcm_params <- function(fit) {
+extract_gcm_params <- function(fit, type = "est") {
   pt <- parameterEstimates(fit)
-  get_est <- function(lhs, op, rhs) {
+  get_val <- function(lhs, op, rhs) {
     row <- pt[pt$lhs == lhs & pt$op == op & pt$rhs == rhs, ]
-    if (nrow(row) > 0) row$est[1] else NA_real_
+    if (nrow(row) > 0) row[[type]][1] else NA_real_
   }
   c(
-    beta_L = get_est("i", "~1", ""),
-    beta_S = get_est("s", "~1", ""),
-    psi_L  = get_est("i", "~~", "i"),
-    psi_S  = get_est("s", "~~", "s"),
-    psi_LS = get_est("i", "~~", "s")
+    beta_L = get_val("i", "~1", ""),
+    beta_S = get_val("s", "~1", ""),
+    psi_L  = get_val("i", "~~", "i"),
+    psi_S  = get_val("s", "~~", "s"),
+    psi_LS = get_val("i", "~~", "s")
   )
 }
 
@@ -197,18 +210,42 @@ run_iteration <- function(sim_id, params) {
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"])
 
-  # ── MICE Baseline ─────────────────────────────────────────────────────────
+  # ── MICE Baseline (MI m=5) ──────────────────────────────────────────────────
   time_mice <- system.time({
-    imp_mice <- tryCatch(mice::complete(mice::mice(df_miss, m = 1, method = "cart",
-                          printFlag = FALSE), 1), error = function(e) NULL)
+    m_mice <- 5
+    imp_mice_list <- tryCatch({
+      imp_obj <- mice::mice(df_miss, m = m_mice, method = "cart", printFlag = FALSE)
+      mice::complete(imp_obj, "all")
+    }, error = function(e) NULL)
+
     s_var_m <- NA; s_se_m <- NA; d_m <- NA
     gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
-    if (!is.null(imp_mice)) {
-      d_m <- frob_dist(stats::cov(imp_mice[, 1:t_points]), true_cov)
-      sv <- extract_slope_var(imp_mice, gcm_mod)
-      s_var_m <- sv["s_var"]; s_se_m <- sv["s_se"]
-      fit_m <- tryCatch(growth(gcm_mod, data = imp_mice), error = function(e) NULL)
-      if (!is.null(fit_m)) gp <- extract_gcm_params(fit_m)
+
+    if (!is.null(imp_mice_list)) {
+      # 1. Pool Covariance for Frobenius Distance
+      cov_list <- lapply(imp_mice_list, function(x) stats::cov(x[, 1:t_points]))
+      avg_cov <- Reduce("+", cov_list) / length(cov_list)
+      d_m <- frob_dist(avg_cov, true_cov)
+
+      # 2. Pool GCM Parameters using Rubin's Rules
+      fit_results <- lapply(imp_mice_list, function(ds) {
+        fit <- tryCatch(lavaan::growth(gcm_mod, data = ds), error = function(e) NULL)
+        if (is.null(fit)) return(NULL)
+        list(est = extract_gcm_params(fit, "est"), se = extract_gcm_params(fit, "se"))
+      })
+
+      valid_fits <- fit_results[!sapply(fit_results, is.null)]
+      if (length(valid_fits) > 0) {
+        p_names <- names(valid_fits[[1]]$est)
+        pooled <- sapply(p_names, function(pn) {
+          ests <- sapply(valid_fits, function(f) f$est[pn])
+          ses  <- sapply(valid_fits, function(f) f$se[pn])
+          pool_rubin(ests, ses)
+        })
+        gp <- pooled["est", ]
+        gps <- pooled["se", ]
+        s_var_m <- gp["psi_S"]; s_se_m <- gps["psi_S"]
+      }
     }
   })["elapsed"]
   res_list[[2]] <- make_row("MICE", d_m, s_var_m, s_se_m, unname(time_mice),
