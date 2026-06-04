@@ -1,15 +1,14 @@
 # ══════════════════════════════════════════════════════════════════════════════
 # Manuscript-Level Performance Plots for smriti
 # Uses existing prod_results.rds — no re-simulation needed.
-# Plot conventions adapted from plot_demo (Tang & Tong, UVA) simulation study:
-#   theme_bw + facet_grid, colour/linetype per method, 27×12-15 cm output.
+# Plot conventions: theme_bw + facet_grid, colour/linetype per method.
 # ══════════════════════════════════════════════════════════════════════════════
 
 library(ggplot2)
 library(dplyr)
 library(tidyr)
 
-# ── Shared plot theme (plot_demo convention) ──────────────────────────────────
+# ── Shared plot theme ─────────────────────────────────────────────────────────
 theme_smriti <- function(legend_pos = "bottom") {
   theme_bw() +
     theme(
@@ -25,7 +24,7 @@ theme_smriti <- function(legend_pos = "bottom") {
     )
 }
 
-# ── Shared colour / linetype scale (plot_demo convention) ─────────────────────
+# ── Shared colour / linetype scale ───────────────────────────────────────────
 method_levels <- c("FIML", "MICE", "missForest", "missRanger",
                    "Smriti_Default", "Smriti_Robust")
 method_colors <- c(
@@ -54,14 +53,6 @@ dist_levels  <- c("Normal", "t5", "Outlier", "Lognormal")
 dist_labels  <- c("Normal", "Student t(5)", "5% Outliers", "Lognormal")
 miss_levels  <- c("5%", "10%", "15%", "30%")
 N_levels     <- c("N = 100", "N = 200", "N = 500", "N = 1k", "N = 5k", "N = 10k")
-
-# ── Parameter truths for reference lines ──────────────────────────────────────
-param_truths <- c(
-  est_L     = 6,  est_S     = 2,
-  est_var_L = 1,  est_var_S = 1,  est_cov_LS = 0,
-  bias_L    = 0,  bias_S    = 0,
-  bias_var_L = 0, bias_var_S = 0, bias_cov_LS = 0
-)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Load & preprocess
@@ -114,29 +105,6 @@ ggsave("manuscript_figures/fig1_frobenius_by_miss.png",
        plot = p1, width = 27, height = 18, units = "cm", dpi = 300)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# FIGURE 2 — Frobenius Distance by Sample Size (MAR)
-# ══════════════════════════════════════════════════════════════════════════════
-cat("Figure 2: Frobenius Distance by Sample Size (MAR)\n")
-
-p2 <- ggplot(fig1, aes(x = N, y = f_dist_mean, group = method)) +
-  geom_line(aes(linetype = method, color = method), linewidth = 0.6) +
-  geom_point(aes(color = method), size = 1.5) +
-  scale_x_log10(
-    breaks = c(100, 200, 500, 1000, 5000, 10000),
-    labels = c("100", "200", "500", "1k", "5k", "10k")
-  ) +
-  scale_method_aes +
-  facet_grid(dist ~ miss_pct) +
-  labs(x = "Sample Size (N)",
-       y = "Frobenius Distance to True Covariance") +
-  theme_smriti()
-
-ggsave("manuscript_figures/fig2_frobenius_by_N.pdf",
-       plot = p2, width = 27, height = 18, units = "cm")
-ggsave("manuscript_figures/fig2_frobenius_by_N.png",
-       plot = p2, width = 27, height = 18, units = "cm", dpi = 300)
-
-# ══════════════════════════════════════════════════════════════════════════════
 # FIGURE 3 — Outlier Degradation (Δ Frobenius: Normal → Outlier, MAR)
 # ══════════════════════════════════════════════════════════════════════════════
 cat("Figure 3: Outlier Degradation (MAR)\n")
@@ -177,13 +145,13 @@ ggsave("manuscript_figures/fig3_outlier_degradation.png",
        plot = p3, width = 27, height = 10, units = "cm", dpi = 300)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# FIGURE 4 — Parameter Bias: Relative Bias by N (MAR, plot_demo style)
+# FIGURE 4 — Parameter Bias: Relative Bias by Missingness Rate (MAR)
 # ══════════════════════════════════════════════════════════════════════════════
-cat("Figure 4: Parameter Relative Bias (MAR)\n")
+cat("Figure 4: Parameter Relative Bias by Missingness (MAR)\n")
 
 bias_long <- agg %>%
-  filter(mech == "MAR", miss == 0.15) %>%
-  select(N, dist, method, bias_L_mean, bias_S_mean,
+  filter(mech == "MAR", dist == "Normal") %>%
+  select(N, N_label, miss, method, bias_L_mean, bias_S_mean,
          bias_var_L_mean, bias_var_S_mean, bias_cov_LS_mean) %>%
   pivot_longer(
     cols      = c(bias_L_mean, bias_S_mean, bias_var_L_mean, bias_var_S_mean, bias_cov_LS_mean),
@@ -195,21 +163,20 @@ bias_long <- agg %>%
     labels = c("beta[L]", "beta[S]", "sigma[L]^2", "sigma[S]^2", "sigma[LS]")
   ))
 
-p4 <- ggplot(bias_long, aes(x = N, y = abs(Bias), group = method)) +
+p4 <- ggplot(bias_long, aes(x = miss, y = abs(Bias), group = method)) +
   geom_hline(yintercept = 10, linetype = "dashed", color = "grey50", linewidth = 0.4) +
   geom_line(aes(linetype = method, color = method), linewidth = 0.6) +
   geom_point(aes(color = method), size = 1.0) +
-  scale_x_log10(
-    breaks = c(100, 200, 500, 1000, 5000, 10000),
-    labels = c("100", "200", "500", "1k", "5k", "10k")
+  scale_x_continuous(
+    breaks = c(0.05, 0.10, 0.15, 0.30),
+    labels = c("5%", "10%", "15%", "30%")
   ) +
   scale_method_aes +
-  facet_wrap(dist ~ Parameter, scales = "free_y", ncol = 5,
-             labeller = labeller(Parameter = label_parsed, dist = label_value,
-                                 .multi_line = FALSE)) +
-  labs(x = "Sample Size (N)",
+  facet_grid(Parameter ~ N_label, scales = "free_y",
+             labeller = labeller(Parameter = label_parsed)) +
+  labs(x = "Missingness Rate",
        y = "|Relative Bias| (%)",
-       subtitle = "Each panel has its own y-axis.  Dashed line: 10% acceptable bias.  15% miss, MAR.") +
+       subtitle = "Normal Distribution. Each row has its own y-axis. Dashed line: 10% acceptable bias.") +
   theme_smriti(legend_pos = "bottom") +
   theme(strip.text = element_text(size = 7))
 
@@ -219,23 +186,23 @@ ggsave("manuscript_figures/fig4_parameter_bias.png",
        plot = p4, width = 35, height = 22, units = "cm", dpi = 300)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# FIGURE 5 — Slope Variance Bias (MAR)
+# FIGURE 5 — Slope Variance Bias by Missingness Rate (MAR)
 # ══════════════════════════════════════════════════════════════════════════════
-cat("Figure 5: Slope Variance Bias (MAR)\n")
+cat("Figure 5: Slope Variance Bias by Missingness (MAR)\n")
 
 fig5 <- agg %>% filter(mech == "MAR")
 
-p5 <- ggplot(fig5, aes(x = N, y = s_var_bias_mean, group = method)) +
+p5 <- ggplot(fig5, aes(x = miss, y = s_var_bias_mean, group = method)) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "grey50", linewidth = 0.4) +
   geom_line(aes(linetype = method, color = method), linewidth = 0.6) +
   geom_point(aes(color = method), size = 1.5) +
-  scale_x_log10(
-    breaks = c(100, 200, 500, 1000, 5000, 10000),
-    labels = c("100", "200", "500", "1k", "5k", "10k")
+  scale_x_continuous(
+    breaks = c(0.05, 0.10, 0.15, 0.30),
+    labels = c("5%", "10%", "15%", "30%")
   ) +
   scale_method_aes +
-  facet_grid(dist ~ miss_pct) +
-  labs(x = "Sample Size (N)",
+  facet_grid(dist ~ N_label) +
+  labs(x = "Missingness Rate",
        y = expression("Bias in Recovered " * sigma[s]^2 * " (%)")) +
   theme_smriti()
 
@@ -264,7 +231,7 @@ p6 <- ggplot(fig6, aes(x = reorder(method, Time_mean), y = Time_mean, fill = met
                 width = 0.2, linewidth = 0.4) +
   scale_fill_manual(values = method_colors, guide = "none") +
   labs(x = "", y = "Mean Time (seconds)",
-       subtitle = "Error bars: ± 1 SD.  Smriti routing step only (~0.6 s).") +
+       subtitle = "Error bars: ± 1 SD. Smriti routing step only (~0.6 s).") +
   theme_bw() +
   theme(
     axis.text.x        = element_text(angle = 45, hjust = 1, size = 10),
@@ -277,23 +244,23 @@ ggsave("manuscript_figures/fig6_timing.png",
        plot = p6, width = 18, height = 10, units = "cm", dpi = 300)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# FIGURE 7 — t5 vs Normal: Heavy-tailed Robustness (MAR)
+# FIGURE 7 — Heavy-tailed Robustness by Missingness Rate (MAR)
 # ══════════════════════════════════════════════════════════════════════════════
-cat("Figure 7: Heavy-tailed (t5) Comparison (MAR)\n")
+cat("Figure 7: Heavy-tailed (t5) Comparison by Missingness (MAR)\n")
 
 fig7 <- agg %>%
   filter(mech == "MAR", dist %in% c("Normal", "Student t(5)"))
 
-p7 <- ggplot(fig7, aes(x = N, y = f_dist_mean, group = method)) +
+p7 <- ggplot(fig7, aes(x = miss, y = f_dist_mean, group = method)) +
   geom_line(aes(linetype = method, color = method), linewidth = 0.6) +
   geom_point(aes(color = method), size = 1.5) +
-  scale_x_log10(
-    breaks = c(100, 200, 500, 1000, 5000, 10000),
-    labels = c("100", "200", "500", "1k", "5k", "10k")
+  scale_x_continuous(
+    breaks = c(0.05, 0.10, 0.15, 0.30),
+    labels = c("5%", "10%", "15%", "30%")
   ) +
   scale_method_aes +
-  facet_grid(dist ~ miss_pct) +
-  labs(x = "Sample Size (N)",
+  facet_grid(dist ~ N_label) +
+  labs(x = "Missingness Rate",
        y = "Frobenius Distance to True Covariance") +
   theme_smriti()
 
@@ -303,24 +270,24 @@ ggsave("manuscript_figures/fig7_t5_comparison.png",
        plot = p7, width = 27, height = 12, units = "cm", dpi = 300)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# FIGURE 8 — MNAR: Frobenius Distance by Sample Size
+# FIGURE 8 — MNAR: Frobenius Distance by Missingness Rate
 # ══════════════════════════════════════════════════════════════════════════════
-cat("Figure 8: MNAR Frobenius Distance by Sample Size\n")
+cat("Figure 8: MNAR Frobenius Distance by Missingness Rate\n")
 
 fig8 <- agg %>% filter(mech == "MNAR")
 
-p8 <- ggplot(fig8, aes(x = N, y = f_dist_mean, group = method)) +
+p8 <- ggplot(fig8, aes(x = miss, y = f_dist_mean, group = method)) +
   geom_line(aes(linetype = method, color = method), linewidth = 0.6) +
   geom_point(aes(color = method), size = 1.5) +
-  scale_x_log10(
-    breaks = c(100, 200, 500, 1000, 5000, 10000),
-    labels = c("100", "200", "500", "1k", "5k", "10k")
+  scale_x_continuous(
+    breaks = c(0.05, 0.10, 0.15, 0.30),
+    labels = c("5%", "10%", "15%", "30%")
   ) +
   scale_method_aes +
-  facet_grid(dist ~ miss_pct) +
-  labs(x = "Sample Size (N)",
+  facet_grid(dist ~ N_label) +
+  labs(x = "Missingness Rate",
        y = "Frobenius Distance to True Covariance",
-       subtitle = "MNAR: all methods degrade.  Smriti is not worse than competitors.") +
+       subtitle = "MNAR: all methods degrade. Smriti is competitive.") +
   theme_smriti()
 
 ggsave("manuscript_figures/fig8_mnar_frobenius.pdf",
@@ -329,23 +296,23 @@ ggsave("manuscript_figures/fig8_mnar_frobenius.png",
        plot = p8, width = 27, height = 18, units = "cm", dpi = 300)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# FIGURE 9 — MNAR: Slope Variance Bias
+# FIGURE 9 — MNAR: Slope Variance Bias by Missingness Rate
 # ══════════════════════════════════════════════════════════════════════════════
-cat("Figure 9: MNAR Slope Variance Bias\n")
+cat("Figure 9: MNAR Slope Variance Bias by Missingness Rate\n")
 
-p9 <- ggplot(fig8, aes(x = N, y = s_var_bias_mean, group = method)) +
+p9 <- ggplot(fig8, aes(x = miss, y = s_var_bias_mean, group = method)) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "grey50", linewidth = 0.4) +
   geom_line(aes(linetype = method, color = method), linewidth = 0.6) +
   geom_point(aes(color = method), size = 1.5) +
-  scale_x_log10(
-    breaks = c(100, 200, 500, 1000, 5000, 10000),
-    labels = c("100", "200", "500", "1k", "5k", "10k")
+  scale_x_continuous(
+    breaks = c(0.05, 0.10, 0.15, 0.30),
+    labels = c("5%", "10%", "15%", "30%")
   ) +
   scale_method_aes +
-  facet_grid(dist ~ miss_pct) +
-  labs(x = "Sample Size (N)",
+  facet_grid(dist ~ N_label) +
+  labs(x = "Missingness Rate",
        y = expression("Bias in Recovered " * sigma[s]^2 * " (%)"),
-       subtitle = "MNAR: negative bias across all methods.  FIML is the least biased.") +
+       subtitle = "MNAR: negative bias across all methods. FIML is the least biased.") +
   theme_smriti()
 
 ggsave("manuscript_figures/fig9_mnar_slope_bias.pdf",
@@ -353,4 +320,4 @@ ggsave("manuscript_figures/fig9_mnar_slope_bias.pdf",
 ggsave("manuscript_figures/fig9_mnar_slope_bias.png",
        plot = p9, width = 27, height = 18, units = "cm", dpi = 300)
 
-cat("\nAll 9 figures saved to manuscript_figures/\n")
+cat("\nAll figures saved to manuscript_figures/\n")
