@@ -2,8 +2,6 @@ Package: smriti
 Title: Automated Routing Engine for Longitudinal Missing Data
 Version: 0.2.0
 Authors@R: person("Xiyuan", "Guo", email = "tommyguo039@gmail.com", role = c("aut", "cre"))
-Author: Xiyuan Guo
-Maintainer: Xiyuan Guo <tommyguo039@gmail.com>
 Description: Provides an automated routing engine for longitudinal missing 
     data. It utilizes a Lagrange-constrained Random Forest based on sample 
     size, missingness rate, and skew to preserve structural variance.
