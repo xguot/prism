@@ -247,6 +247,47 @@ run_iteration <- function(sim_id, params) {
     }
   }
 
+  # ── Smriti_FIML: MAR-consistent target (λ = 1.0) ─────────────────────────
+  # Uses lavaan FIML to extract the model-implied Σ as the structural target.
+  # This is the correct comparison for MAR data — pairwise-deletion targets
+  # (the lambdas × robusts grid above) are systematically biased under MAR
+  # dropout.  Included here so the tuning table can show FIML-Σ performance
+  # alongside the pairwise-target variants.
+  tag_sf <- "Smriti_FIML"
+  time_sf <- system.time({
+    imp_sf <- tryCatch(
+      smriti_fiml(df_miss, model = gcm_mod,
+                  initial_imputation = imp_mf, lambda = 1.0),
+      error = function(e) NULL
+    )
+    s_var_sf <- NA; s_se_sf <- NA; d_sf <- NA; rb_sf <- NA
+    if (!is.null(imp_sf)) {
+      cov_imp <- stats::cov(imp_sf[, 1:t_points])
+      d_sf <- frob_dist(cov_imp, true_cov)
+      fit_sf <- tryCatch(
+        growth(gcm_mod, data = imp_sf),
+        error = function(e) NULL
+      )
+      if (!is.null(fit_sf)) {
+        pt <- parameterEstimates(fit_sf)
+        row <- pt[pt$lhs == "s" & pt$op == "~~" & pt$rhs == "s", ]
+        if (nrow(row) > 0) {
+          s_var_sf <- row$est[1]
+          s_se_sf  <- row$se[1]
+          rb_sf    <- rel_bias(s_var_sf, v_s)
+        }
+      }
+    }
+  })["elapsed"]
+  res_list[[length(res_list) + 1]] <- data.frame(
+    sim_id = sim_id, N = params$n, miss = params$miss,
+    actual_miss = act_m,
+    dist = params$dist,
+    mech = params$mech, method = tag_sf, lambda = 1.0, robust = FALSE,
+    f_dist = d_sf, s_var = s_var_sf, s_se = s_se_sf, rel_bias = rb_sf,
+    time_sec = unname(time_sf)
+  )
+
   rm(df_true, df_miss, imp_mf)
   do.call(rbind, res_list)
 }
@@ -260,7 +301,7 @@ conditions <- expand.grid(
 conditions$lambdas <- list(grid_lambda)
 conditions$robusts <- list(grid_robust)
 total_conditions <- nrow(conditions)
-n_variants <- 1 + length(grid_lambda) * length(grid_robust)  # FIML + smriti combos
+n_variants <- 2 + length(grid_lambda) * length(grid_robust)  # FIML + Smriti_FIML + smriti combos
 
 # ── SLURM Array Dispatch ─────────────────────────────────────────────────────
 # When running under a SLURM job array, each task processes exactly one

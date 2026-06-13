@@ -26,12 +26,13 @@ theme_smriti <- function(legend_pos = "bottom") {
 
 # ── Shared colour / linetype scale ───────────────────────────────────────────
 method_levels <- c("FIML", "MICE", "missForest", "missRanger",
-                   "Smriti_Default", "Smriti_Robust")
+                   "Smriti_FIML", "Smriti_Default", "Smriti_Robust")
 method_colors <- c(
   "FIML"           = "#999999",
   "MICE"           = "#56B4E9",
   "missForest"     = "#009E73",
   "missRanger"     = "#0072B5",
+  "Smriti_FIML"    = "#E6A000",
   "Smriti_Default" = "#D55E00",
   "Smriti_Robust"  = "#CC0000"
 )
@@ -40,6 +41,7 @@ method_linetypes <- c(
   "MICE"           = "dashed",
   "missForest"     = "dashed",
   "missRanger"     = "dotted",
+  "Smriti_FIML"    = "solid",
   "Smriti_Default" = "solid",
   "Smriti_Robust"  = "solid"
 )

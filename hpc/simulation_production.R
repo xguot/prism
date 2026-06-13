@@ -358,7 +358,34 @@ run_iteration <- function(sim_id, params) {
                             psi_LS = gp["psi_LS"],
                             pipeline_time = unname(time_mf) + unname(time_sr))
 
-  rm(df_true, df_miss, imp_mice, imp_mf, imp_mr, imp_sd, imp_sr)
+  # ── Smriti: FIML model-implied Σ target (MAR-consistent) ─────────────────
+  # Uses smriti_fiml() which fits a lavaan growth model with FIML to extract
+  # the model-implied covariance as the structural target, then projects the
+  # missForest initial imputation toward it.  This is the correct Smriti
+  # variant for MAR data — pairwise-deletion targets (Default / Robust)
+  # are biased toward survivors and should not be used under MAR dropout.
+  time_sf <- system.time({
+    imp_sf <- tryCatch(smriti_fiml(df_miss, model = gcm_mod,
+                       initial_imputation = imp_mf, lambda = 1.0),
+                       error = function(e) NULL)
+    s_var_sf <- NA; s_se_sf <- NA; d_sf <- NA
+    gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
+    if (!is.null(imp_sf)) {
+      d_sf <- frob_dist(stats::cov(imp_sf[, 1:t_points]), true_cov)
+      sv <- extract_slope_var(imp_sf, gcm_mod)
+      s_var_sf <- sv["s_var"]; s_se_sf <- sv["s_se"]
+      fit_sf <- tryCatch(growth(gcm_mod, data = imp_sf), error = function(e) NULL)
+      if (!is.null(fit_sf)) gp <- extract_gcm_params(fit_sf)
+    }
+  })["elapsed"]
+  res_list[[7]] <- make_row("Smriti_FIML", d_sf, s_var_sf, s_se_sf,
+                            unname(time_sf),
+                            beta_L = gp["beta_L"], beta_S = gp["beta_S"],
+                            psi_L = gp["psi_L"], psi_S = gp["psi_S"],
+                            psi_LS = gp["psi_LS"],
+                            pipeline_time = unname(time_mf) + unname(time_sf))
+
+  rm(df_true, df_miss, imp_mice, imp_mf, imp_mr, imp_sd, imp_sr, imp_sf)
   do.call(rbind, res_list)
 }
 
@@ -377,8 +404,8 @@ if (!is.na(array_id) && array_id >= 1 && array_id <= total_conditions) {
 }
 
 # ── Execution ────────────────────────────────────────────────────────────────
-cat(sprintf("Grid: %d conditions × %d reps × 6 methods = %d total rows\n",
-            total_conditions, n_sims, total_conditions * n_sims * 6))
+cat(sprintf("Grid: %d conditions × %d reps × 7 methods = %d total rows\n",
+            total_conditions, n_sims, total_conditions * n_sims * 7))
 cat(sprintf("Parallel cores: %d\n", num_cores))
 cat(sprintf("Output: %s\n\n", output_file))
 
