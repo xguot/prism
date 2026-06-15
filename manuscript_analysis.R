@@ -1,41 +1,72 @@
-library(dplyr)
-library(tidyr)
-
 # ══════════════════════════════════════════════════════════════════════════════
 # Manuscript-Level Performance Analysis for smriti
-# Uses existing prod_results.rds and tune_results.rds — no re-simulation needed.
+# Style adapted from mda/analysis.R — parameter-level breakdown, MSE, heatmaps
+# Uses prod_results.rds (post-HPC) and tune_results.rds
 # ══════════════════════════════════════════════════════════════════════════════
+
+library(dplyr)
+library(tidyr)
 
 prod  <- readRDS("sim_results/prod_results.rds")
 tune_file <- "sim_results/tune_results.rds"
 tune_exists <- file.exists(tune_file)
 
-if (tune_exists) {
-  tune <- readRDS(tune_file)
-} else {
-  tune <- NULL
-  warning("Tuning results not found at ", tune_file, ". Skipping tuning-dependent tables.")
+# ── Shared helpers ────────────────────────────────────────────────────────────
+hr <- function(label) {
+  cat("\n", strrep("=", 90), "\n", sep = "")
+  cat(label, "\n")
+  cat(strrep("=", 90), "\n\n", sep = "")
 }
+
+beta_true   <- c(psi_L = 1, psi_S = 1, psi_LS = 0, beta_L = 6, beta_S = 2)
+param_names <- names(beta_true)
+param_labels <- c(
+  psi_L  = expression(psi[L] ~ "(Var intercept)"),
+  psi_S  = expression(psi[S] ~ "(Var slope)"),
+  psi_LS = expression(psi[LS] ~ "(Covariance)"),
+  beta_L = expression(beta[L] ~ "(Intercept)"),
+  beta_S = expression(beta[S] ~ "(Slope)")
+)
 
 cat(sprintf("Production data: %d rows, %d methods\n",
             nrow(prod), length(unique(prod$method))))
 if (tune_exists) {
-  cat(sprintf("Tuning data:     %d rows, λ ∈ {%s}\n",
+  tune <- readRDS(tune_file)
+  cat(sprintf("Tuning data:     %d rows, lambda in {%s}\n",
               nrow(tune), paste(sort(unique(tune$lambda)), collapse = ", ")))
+} else {
+  tune <- NULL
+  warning("tune_results.rds not found. Skipping tuning-dependent tables.")
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TABLE 1 — Frobenius Distance (primary metric: full covariance recovery)
-# ══════════════════════════════════════════════════════════════════════════════
-cat("\n")
-cat(strrep("═", 74), "\n")
-cat("TABLE 1 — Frobenius Distance to True Covariance (lower = better)\n")
-cat("        Split by distribution × mechanism.  MAR is the fair comparison.\n")
-cat(strrep("═", 74), "\n\n")
+# ── Build per-parameter long table (all methods, all conditions) ─────────────
+# Map production column names to GCM parameter names
+est_cols <- c(
+  psi_L  = "est_var_L",  psi_S  = "est_var_S", psi_LS = "est_cov_LS",
+  beta_L = "est_L",       beta_S = "est_S"
+)
 
-frob_table <- prod %>%
+all_params <- do.call(rbind, lapply(param_names, function(pn) {
+  tv <- beta_true[pn]
+  ec <- est_cols[pn]
+  prod %>%
+    mutate(
+      param    = pn,
+      est      = .data[[ec]],
+      bias_raw = est - tv,
+      relbias  = if (abs(tv) < 1e-12) est - tv else 100 * (est - tv) / tv
+    ) %>%
+    select(sim_id, N, miss, dist, mech, method, param, est, bias_raw, relbias)
+}))
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TABLE 1 — Frobenius Distance (primary metric)
+# ══════════════════════════════════════════════════════════════════════════════
+hr("TABLE 1 — Frobenius Distance to True Covariance (lower = better)")
+
+prod %>%
   group_by(dist, mech, method) %>%
-  summarize(
+  summarise(
     Frobenius = mean(f_dist, na.rm = TRUE),
     SD        = sd(f_dist, na.rm = TRUE),
     .groups   = "drop"
@@ -43,209 +74,183 @@ frob_table <- prod %>%
   mutate(Display = sprintf("%.2f (%.2f)", Frobenius, SD)) %>%
   select(dist, mech, method, Display) %>%
   pivot_wider(names_from = mech, values_from = Display) %>%
-  arrange(dist, method)
-
-print(as.data.frame(frob_table), row.names = FALSE)
+  arrange(dist, method) %>%
+  as.data.frame() %>%
+  print(row.names = FALSE)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TABLE 2 — Frobenius Distance by Sample Size (does advantage hold at low N?)
+# TABLE 2 — Frobenius by Sample Size (MAR only)
 # ══════════════════════════════════════════════════════════════════════════════
-cat("\n")
-cat(strrep("═", 74), "\n")
-cat("TABLE 2 — Frobenius Distance by Sample Size (MAR only)\n")
-cat("        Does the Smriti advantage persist at N = 100?\n")
-cat(strrep("═", 74), "\n\n")
+hr("TABLE 2 — Frobenius Distance by Sample Size (MAR only)")
 
-n_table <- prod %>%
+prod %>%
   filter(mech == "MAR") %>%
   group_by(N, dist, method) %>%
-  summarize(
-    Frobenius = mean(f_dist, na.rm = TRUE),
-    .groups   = "drop"
-  ) %>%
+  summarise(Frobenius = mean(f_dist, na.rm = TRUE), .groups = "drop") %>%
   mutate(Display = sprintf("%.2f", Frobenius)) %>%
   select(N, dist, method, Display) %>%
   pivot_wider(names_from = N, values_from = Display, names_prefix = "N=") %>%
-  arrange(dist, method)
-
-print(as.data.frame(n_table), row.names = FALSE)
+  arrange(dist, method) %>%
+  as.data.frame() %>%
+  print(row.names = FALSE)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TABLE 3 — Frobenius Distance by Missingness Rate (MAR only)
+# TABLE 3 — Frobenius by Missingness Rate (MAR only)
 # ══════════════════════════════════════════════════════════════════════════════
-cat("\n")
-cat(strrep("═", 74), "\n")
-cat("TABLE 3 — Frobenius Distance by Missingness Rate (MAR only)\n")
-cat("        Does the Smriti advantage hold at 30% missingness?\n")
-cat(strrep("═", 74), "\n\n")
+hr("TABLE 3 — Frobenius Distance by Missingness Rate (MAR only)")
 
-miss_table <- prod %>%
+prod %>%
   filter(mech == "MAR") %>%
-  group_by(miss, dist, method) %>%
-  summarize(
-    Frobenius = mean(f_dist, na.rm = TRUE),
-    .groups   = "drop"
-  ) %>%
-  mutate(
-    Display = sprintf("%.2f", Frobenius),
-    miss_pct = sprintf("%.0f%%", miss * 100)
-  ) %>%
+  mutate(miss_pct = sprintf("%.0f%%", miss * 100)) %>%
+  group_by(miss_pct, dist, method) %>%
+  summarise(Frobenius = mean(f_dist, na.rm = TRUE), .groups = "drop") %>%
+  mutate(Display = sprintf("%.2f", Frobenius)) %>%
   select(miss_pct, dist, method, Display) %>%
   pivot_wider(names_from = miss_pct, values_from = Display) %>%
-  arrange(dist, method)
-
-print(as.data.frame(miss_table), row.names = FALSE)
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TABLE 4 — Slope Variance Bias (secondary metric, MAR only)
-# ══════════════════════════════════════════════════════════════════════════════
-cat("\n")
-cat(strrep("═", 74), "\n")
-cat("TABLE 4 — Slope Variance Bias (MAR, secondary SEM metric)\n")
-cat("        How well is the latent slope variance recovered?\n")
-cat(strrep("═", 74), "\n\n")
-
-bias_table <- prod %>%
-  filter(mech == "MAR") %>%
-  group_by(dist, method) %>%
-  summarize(
-    Bias_pct = mean(s_var_bias, na.rm = TRUE),
-    SD       = sd(s_var, na.rm = TRUE),
-    .groups  = "drop"
-  ) %>%
-  mutate(Display = sprintf("%+.2f%% (±%.3f)", Bias_pct, SD)) %>%
-  select(dist, method, Display) %>%
-  pivot_wider(names_from = dist, values_from = Display)
-
-print(as.data.frame(bias_table), row.names = FALSE)
+  arrange(dist, method) %>%
+  as.data.frame() %>%
+  print(row.names = FALSE)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TABLE 5 — Outlier Robustness: Degradation from Normal to Outlier (MAR)
+# TABLE 4 — Relative Bias per GCM Parameter (MAR, aggregated across N × miss)
 # ══════════════════════════════════════════════════════════════════════════════
-cat("\n")
-cat(strrep("═", 74), "\n")
-cat("TABLE 5 — Outlier Impact: Frobenius Distance (Normal → Outlier Δ, MAR)\n")
-cat("        Lower delta = more robust to 5% contamination.\n")
-cat(strrep("═", 74), "\n\n")
+for (pn in param_names) {
+  tv <- beta_true[pn]
+  title <- if (abs(tv) < 1e-12)
+    sprintf("TABLE 4%s — Raw Bias: %s (truth = 0)", pn, param_labels[pn])
+  else
+    sprintf("TABLE 4%s — Relative Bias: %s (%%, truth = %.0f)", pn, param_labels[pn], tv)
+  hr(title)
 
-outlier_impact <- prod %>%
+  all_params %>%
+    filter(param == pn, mech == "MAR") %>%
+    group_by(dist, method) %>%
+    summarise(
+      M  = mean(relbias, na.rm = TRUE),
+      SD = sd(relbias, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(Display = sprintf("%+.2f (%.2f)", M, SD)) %>%
+    select(dist, method, Display) %>%
+    pivot_wider(names_from = dist, values_from = Display) %>%
+    arrange(method) %>%
+    as.data.frame() %>%
+    print(row.names = FALSE)
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TABLE 5 — MSE per GCM Parameter (MAR, aggregated)
+# ══════════════════════════════════════════════════════════════════════════════
+for (pn in param_names) {
+  tv <- beta_true[pn]
+  hr(sprintf("TABLE 5%s — MSE: %s (truth = %.0f)", pn, param_labels[pn], tv))
+
+  all_params %>%
+    filter(param == pn, mech == "MAR") %>%
+    group_by(dist, method) %>%
+    summarise(
+      bias_raw = mean(est, na.rm = TRUE) - tv,
+      ESE      = sd(est, na.rm = TRUE),
+      MSE      = bias_raw^2 + ESE^2,
+      .groups  = "drop"
+    ) %>%
+    mutate(Display = sprintf("%.4f", MSE)) %>%
+    select(dist, method, Display) %>%
+    pivot_wider(names_from = dist, values_from = Display) %>%
+    arrange(method) %>%
+    as.data.frame() %>%
+    print(row.names = FALSE)
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TABLE 6 — Outlier Impact: Frobenius Degradation (MAR)
+# ══════════════════════════════════════════════════════════════════════════════
+hr("TABLE 6 — Outlier Impact: Delta Frobenius (Normal -> Outlier, MAR)")
+
+prod %>%
   filter(mech == "MAR", dist %in% c("Normal", "Outlier")) %>%
   group_by(dist, method) %>%
-  summarize(Frob = mean(f_dist, na.rm = TRUE), .groups = "drop") %>%
+  summarise(Frob = mean(f_dist, na.rm = TRUE), .groups = "drop") %>%
   pivot_wider(names_from = dist, values_from = Frob) %>%
   mutate(
-    Delta = Outlier - Normal,
-    Display = sprintf("%.2f → %.2f  (Δ %+.2f)", Normal, Outlier, Delta)
+    Delta   = Outlier - Normal,
+    Display = sprintf("%.2f -> %.2f  (Delta %+.2f)", Normal, Outlier, Delta)
   ) %>%
   arrange(Delta) %>%
-  select(method, Display)
-
-print(as.data.frame(outlier_impact), row.names = FALSE)
+  select(method, Display) %>%
+  as.data.frame() %>%
+  print(row.names = FALSE)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TABLE 6 — Tuning Study: λ Selection via Frobenius Distance (MAR only)
+# TABLE 7 — Timing Summary (MAR, mean ± SD seconds)
+# ══════════════════════════════════════════════════════════════════════════════
+hr("TABLE 7 — Timing Summary (mean +/- SD seconds)")
+
+prod %>%
+  filter(mech == "MAR") %>%
+  group_by(method) %>%
+  summarise(
+    Mean = mean(time_sec, na.rm = TRUE),
+    SD   = sd(time_sec, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(Display = sprintf("%.2f +/- %.2f", Mean, SD)) %>%
+  select(method, Display) %>%
+  arrange(method) %>%
+  as.data.frame() %>%
+  print(row.names = FALSE)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TABLE 8 — Relative Bias Heatmap Summary (MAR, pooled across conditions)
+# ══════════════════════════════════════════════════════════════════════════════
+hr("TABLE 8 — Relative Bias Summary (MAR, pooled across N x miss)")
+
+all_params %>%
+  filter(mech == "MAR") %>%
+  group_by(param, method) %>%
+  summarise(RelBias = mean(relbias, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = param, values_from = RelBias) %>%
+  mutate(across(where(is.numeric), ~ sprintf("%+.1f%%", .x))) %>%
+  arrange(method) %>%
+  as.data.frame() %>%
+  print(row.names = FALSE)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tuning-dependent tables
 # ══════════════════════════════════════════════════════════════════════════════
 if (tune_exists) {
-  cat("\n")
-  cat(strrep("═", 74), "\n")
-  cat("TABLE 6 — λ Tuning: Frobenius Distance by λ (MAR, pooled N × miss)\n")
-  cat("        Coarse tuning: N ∈ {200, 500, 5000}, 100 reps per condition.\n")
-  cat(strrep("═", 74), "\n\n")
+  hr("TABLE T1 — Lambda Tuning: Frobenius by lambda x robust (MAR, pooled)")
 
-  tune_summary <- tune %>%
+  tune %>%
     filter(mech == "MAR") %>%
     group_by(lambda, robust, dist) %>%
-    summarize(
+    summarise(
       Frobenius = mean(f_dist, na.rm = TRUE),
       Bias_pct  = mean(rel_bias, na.rm = TRUE),
       .groups   = "drop"
     ) %>%
     mutate(
       Robust  = ifelse(robust, "Robust", "Pearson"),
-      Display = sprintf("λ=%.2f %-7s  Frob=%.2f  Bias=%+.1f%%",
+      Display = sprintf("lambda=%.2f %-7s  Frob=%.2f  Bias=%+.1f%%",
                         lambda, Robust, Frobenius, Bias_pct)
     ) %>%
-    arrange(dist, lambda, desc(robust))
+    arrange(dist, lambda, desc(robust)) -> tune_tbl
 
-  for (d in unique(tune_summary$dist)) {
-    cat(sprintf("\n  ── %s ──\n", d))
-    subset_rows <- tune_summary %>%
-      filter(dist == d) %>%
-      pull(Display)
+  for (d in unique(tune_tbl$dist)) {
+    cat(sprintf("\n  -- %s --\n", d))
+    subset_rows <- tune_tbl %>% filter(dist == d) %>% pull(Display)
     for (line in subset_rows) cat("  ", line, "\n")
   }
 
-  # ══════════════════════════════════════════════════════════════════════════════
-  # λ = 1.0 justification
-  # ══════════════════════════════════════════════════════════════════════════════
-  cat("\n")
-  cat(strrep("═", 74), "\n")
-  cat("λ SELECTION RATIONALE\n")
-  cat(strrep("═", 74), "\n\n")
-
-  # Find the best λ per (dist, robust) combo by Frobenius distance
-  best_lambda <- tune %>%
-    filter(mech == "MAR") %>%
-    group_by(dist, robust) %>%
-    summarize(
-      best_λ = lambda[which.min(mean(f_dist))],
-      best_frob = min(mean(f_dist)),
-      λ1_frob  = mean(f_dist[lambda == 1.0]),
-      λ1_loss  = mean(f_dist[lambda == 1.0]) - min(mean(f_dist)),
-      .groups  = "drop"
-    )
-
-  for (i in seq_len(nrow(best_lambda))) {
-    r <- best_lambda[i, ]
-    cat(sprintf("  %-10s %-7s: best λ=%.2f (Frob=%.2f); λ=1.0 gives Frob=%.2f (Δ +%.3f)\n",
-                r$dist, ifelse(r$robust, "Robust", "Pearson"),
-                r$best_λ, r$best_frob, r$λ1_frob, r$λ1_loss))
-  }
-
-  cat("\n  → λ = 1.0 selected as a single default that balances performance\n")
-  cat("    across Normal and Outlier distributions for both robust and Pearson\n")
-  cat("    modes.  It is within 0.01–0.05 Frobenius units of the per-condition\n")
-  cat("    optimum while avoiding overfitting to any single data regime.\n")
-} else {
-  cat("\nTABLE 6 (Tuning Study) skipped — missing tune_results.rds\n")
-}
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TABLE 7 — Timing Breakdown
-# ══════════════════════════════════════════════════════════════════════════════
-cat("\n")
-cat(strrep("═", 74), "\n")
-cat("TABLE 7 — Timing (seconds, MAR, mean across all conditions)\n")
-cat(strrep("═", 74), "\n\n")
-
-time_table <- prod %>%
-  filter(mech == "MAR") %>%
-  group_by(method) %>%
-  summarize(
-    Time = mean(time_sec, na.rm = TRUE),
-    SD   = sd(time_sec, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(Display = sprintf("%.2f ± %.2f s", Time, SD)) %>%
-  select(method, Display)
-
-print(as.data.frame(time_table), row.names = FALSE)
-
-cat("\n  NOTE: Smriti timing reflects the Lagrangian routing step only.\n")
-cat("  The full pipeline (missForest init + routing) adds ~8 s.\n")
-
-# ══════════════════════════════════════════════════════════════════════════════
-# AUTOMATED CSV EXPORTS
-# ══════════════════════════════════════════════════════════════════════════════
-cat("\nSaving summary tables to sim_results/...\n")
-write.csv(frob_table,    "sim_results/table1_frobenius_main.csv",  row.names = FALSE)
-write.csv(n_table,       "sim_results/table2_frobenius_by_N.csv",  row.names = FALSE)
-write.csv(miss_table,    "sim_results/table3_frobenius_by_miss.csv", row.names = FALSE)
-write.csv(bias_table,    "sim_results/table4_slope_bias.csv",       row.names = FALSE)
-write.csv(outlier_impact, "sim_results/table5_outlier_impact.csv",  row.names = FALSE)
-write.csv(time_table,     "sim_results/table7_timing.csv",          row.names = FALSE)
-
-if (tune_exists) {
-  write.csv(tune_summary, "sim_results/table6_tuning_summary.csv", row.names = FALSE)
-  write.csv(best_lambda,  "sim_results/table6_best_lambda.csv",    row.names = FALSE)
+  hr("TABLE T2 — FIML vs Smriti_FIML (Tuning Study Summary)")
+  tune %>%
+    filter(mech == "MAR", method %in% c("FIML", "Smriti_FIML")) %>%
+    group_by(method) %>%
+    summarise(
+      Frob = mean(f_dist, na.rm = TRUE),
+      SD   = sd(f_dist, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    as.data.frame() %>%
+    print(row.names = FALSE)
 }
