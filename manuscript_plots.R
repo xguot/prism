@@ -256,11 +256,11 @@ ggsave("manuscript_figures/fig4_mse_bars.png",
        plot = p4, width = 28, height = 20, units = "cm", dpi = 300)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# FIGURE 5 — Slope Variance Bias by Missingness Rate (MAR)
+# FIGURE 5 — Slope Variance Bias by Missingness Rate (MAR + MNAR)
 # ══════════════════════════════════════════════════════════════════════════════
-cat("Figure 5: Slope Variance Bias by Missingness (MAR)\n")
+cat("Figure 5: Slope Variance Bias by Missingness (MAR & MNAR)\n")
 
-fig5 <- agg %>% filter(mech == "MAR")
+fig5 <- agg %>% filter(mech %in% c("MAR", "MNAR"))
 
 p5 <- ggplot(fig5, aes(x = miss, y = s_var_bias_mean, group = method)) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "grey50", linewidth = 0.4) +
@@ -271,14 +271,12 @@ p5 <- ggplot(fig5, aes(x = miss, y = s_var_bias_mean, group = method)) +
     labels = c("5%", "10%", "15%", "30%")
   ) +
   scale_method_aes +
-  facet_grid(dist ~ N_label) +
+  facet_grid(dist ~ mech + N_label) +
   labs(x = "Missingness Rate",
        y = "Slope Variance Relative Bias (%)") +
   theme_smriti()
 
 ggsave("manuscript_figures/fig5_slope_bias.pdf",
-       plot = p5, width = 27, height = 18, units = "cm")
-ggsave("manuscript_figures/fig5_slope_bias.png",
-       plot = p5, width = 27, height = 18, units = "cm", dpi = 300)
+       plot = p5, width = 52, height = 18, units = "cm")
 
 cat("\nAll figures saved to manuscript_figures/\n")
