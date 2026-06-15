@@ -1,8 +1,6 @@
 #!/bin/bash
 # rsync smriti to Rivanna HPC scratch space
-# Usage: bash tmp/rsync.sh [netbadge_id]
-#
-# If netbadge_id is omitted, defaults to 'xguo' (change as needed).
+# Usage: bash tmp/rsync.sh
 #
 # Excludes:
 #   - Compiled objects and shared libs (will rebuild on Rivanna)
@@ -14,8 +12,7 @@
 
 set -euo pipefail
 
-NETBADGE="${1:-xguo}"
-REMOTE="${NETBADGE}@rivanna.hpc.virginia.edu"
+REMOTE="rivanna"
 DEST="~/scratch/smriti"
 
 # ── Source directory (this repo root) ───────────────────────────────────────
