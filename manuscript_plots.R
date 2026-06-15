@@ -278,5 +278,7 @@ p5 <- ggplot(fig5, aes(x = miss, y = s_var_bias_mean, group = method)) +
 
 ggsave("manuscript_figures/fig5_slope_bias.pdf",
        plot = p5, width = 52, height = 18, units = "cm")
+ggsave("manuscript_figures/fig5_slope_bias.png",
+       plot = p5, width = 52, height = 18, units = "cm", dpi = 300)
 
 cat("\nAll figures saved to manuscript_figures/\n")
