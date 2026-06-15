@@ -229,6 +229,36 @@ run_iteration <- function(sim_id, params) {
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"])
 
+  # ── FIML + lavPredict: conditional-expectation completed data ─────────────
+  # lavPredict(type="ov") gives the conditional expectation of each missing
+  # value given the observed data and the FIML parameter estimates.  This is
+  # the "obvious" way to get completed data from a FIML model — but the
+  # conditional expectations are shrunk toward the mean, attenuating variance.
+  # Included here as a baseline to demonstrate that the naive FIML-completed
+  # dataset fails at the covariance level, motivating the Smriti projection.
+  time_fp <- system.time({
+    s_var_fp <- NA; s_se_fp <- NA; d_fp <- NA
+    gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
+    if (!is.null(fit_fiml)) {
+      imp_fp <- tryCatch(lavaan::lavPredict(fit_fiml, type = "ov"),
+                         error = function(e) NULL)
+      if (!is.null(imp_fp)) {
+        d_fp <- frob_dist(stats::cov(imp_fp[, 1:t_points]), true_cov)
+        colnames(imp_fp) <- paste0("T", 1:t_points)
+        sv <- extract_slope_var(as.data.frame(imp_fp), gcm_mod)
+        s_var_fp <- sv["s_var"]; s_se_fp <- sv["s_se"]
+        fit_fp <- tryCatch(growth(gcm_mod, data = as.data.frame(imp_fp)),
+                           error = function(e) NULL)
+        if (!is.null(fit_fp)) gp <- extract_gcm_params(fit_fp)
+      }
+    }
+  })["elapsed"]
+  res_list[[2]] <- make_row("FIML_Predict", d_fp, s_var_fp, s_se_fp,
+                            unname(time_fp),
+                            beta_L = gp["beta_L"], beta_S = gp["beta_S"],
+                            psi_L = gp["psi_L"], psi_S = gp["psi_S"],
+                            psi_LS = gp["psi_LS"])
+
   # ── MICE Baseline (MI m=20) ─────────────────────────────────────────────────
   time_mice <- system.time({
     m_mice <- 20
@@ -267,7 +297,7 @@ run_iteration <- function(sim_id, params) {
       }
     }
   })["elapsed"]
-  res_list[[2]] <- make_row("MICE", d_m, s_var_m, s_se_m, unname(time_mice),
+  res_list[[3]] <- make_row("MICE", d_m, s_var_m, s_se_m, unname(time_mice),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"])
@@ -286,7 +316,7 @@ run_iteration <- function(sim_id, params) {
       if (!is.null(fit_mf)) gp <- extract_gcm_params(fit_mf)
     }
   })["elapsed"]
-  res_list[[3]] <- make_row("missForest", d_mf, s_var_mf, s_se_mf, unname(time_mf),
+  res_list[[4]] <- make_row("missForest", d_mf, s_var_mf, s_se_mf, unname(time_mf),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"])
@@ -305,7 +335,7 @@ run_iteration <- function(sim_id, params) {
       if (!is.null(fit_mr)) gp <- extract_gcm_params(fit_mr)
     }
   })["elapsed"]
-  res_list[[4]] <- make_row("missRanger", d_mr, s_var_mr, s_se_mr, unname(time_mr),
+  res_list[[5]] <- make_row("missRanger", d_mr, s_var_mr, s_se_mr, unname(time_mr),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"])
@@ -329,7 +359,7 @@ run_iteration <- function(sim_id, params) {
       if (!is.null(fit_sd)) gp <- extract_gcm_params(fit_sd)
     }
   })["elapsed"]
-  res_list[[5]] <- make_row("Smriti_Default", d_sd, s_var_sd, s_se_sd,
+  res_list[[6]] <- make_row("Smriti_Default", d_sd, s_var_sd, s_se_sd,
                             unname(time_sd),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
@@ -351,7 +381,7 @@ run_iteration <- function(sim_id, params) {
       if (!is.null(fit_sr)) gp <- extract_gcm_params(fit_sr)
     }
   })["elapsed"]
-  res_list[[6]] <- make_row("Smriti_Robust", d_sr, s_var_sr, s_se_sr,
+  res_list[[7]] <- make_row("Smriti_Robust", d_sr, s_var_sr, s_se_sr,
                             unname(time_sr),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
@@ -378,14 +408,14 @@ run_iteration <- function(sim_id, params) {
       if (!is.null(fit_sf)) gp <- extract_gcm_params(fit_sf)
     }
   })["elapsed"]
-  res_list[[7]] <- make_row("Smriti_FIML", d_sf, s_var_sf, s_se_sf,
+  res_list[[8]] <- make_row("Smriti_FIML", d_sf, s_var_sf, s_se_sf,
                             unname(time_sf),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"],
                             pipeline_time = unname(time_mf) + unname(time_sf))
 
-  rm(df_true, df_miss, imp_mice, imp_mf, imp_mr, imp_sd, imp_sr, imp_sf)
+  rm(df_true, df_miss, imp_mice, imp_mf, imp_mr, imp_sd, imp_sr, imp_sf, imp_fp)
   do.call(rbind, res_list)
 }
 
@@ -404,8 +434,8 @@ if (!is.na(array_id) && array_id >= 1 && array_id <= total_conditions) {
 }
 
 # ── Execution ────────────────────────────────────────────────────────────────
-cat(sprintf("Grid: %d conditions × %d reps × 7 methods = %d total rows\n",
-            total_conditions, n_sims, total_conditions * n_sims * 7))
+cat(sprintf("Grid: %d conditions × %d reps × 8 methods = %d total rows\n",
+            total_conditions, n_sims, total_conditions * n_sims * 8))
 cat(sprintf("Parallel cores: %d\n", num_cores))
 cat(sprintf("Output: %s\n\n", output_file))
 
