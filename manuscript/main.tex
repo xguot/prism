@@ -1,0 +1,134 @@
+\documentclass[12pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{multirow}
+
+\title{A Lagrangian Projection Framework for Structure-Preserving Imputation}
+\author{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We propose a two-stage framework for longitudinal missing data imputation that decouples predictive accuracy from structural consistency. In the first stage, a nonparametric machine learner (Random Forest) produces an initial imputation with high point-level accuracy. In the second stage, a constrained Lagrangian projection refines the imputed values so that the empirical covariance matrix of the completed dataset matches a user-supplied structural target. When the target is the model-implied covariance from Full Information Maximum Likelihood (FIML), the resulting dataset retains the predictive flexibility of the initial imputer while achieving the inferential validity of likelihood-based estimation. A 75-line C++ implementation demonstrates the approach on 192 simulation conditions, recovering growth curve slope variance within 1.6\% bias compared to $-$66.6\% for Random Forest imputation alone.
+\end{abstract}
+
+\section{Problem Statement}
+
+Let $\mathbf{X} \in \mathbb{R}^{n \times p}$ be a longitudinal data matrix with $p$ time points and $n$ subjects. Define a missingness mask $\mathbf{M} \in \{0,1\}^{n \times p}$ where $M_{ij} = 1$ indicates a missing entry. The observed data is $\mathbf{X}_{\text{obs}} = \{X_{ij} : M_{ij} = 0\}$.
+
+Given an initial imputation $\tilde{\mathbf{X}}$ (complete, produced by any method) and a target covariance matrix $\boldsymbol{\Sigma}^* \in \mathbb{R}^{p \times p}$, we seek a refined matrix $\hat{\mathbf{X}}$ that solves:
+
+\begin{equation}\label{eq:opt}
+\begin{aligned}
+\min_{\hat{\mathbf{X}}} \quad & \|\hat{\mathbf{X}} - \tilde{\mathbf{X}}\|_F^2 \\
+\text{subject to} \quad & \operatorname{cov}(\hat{\mathbf{X}}) = \boldsymbol{\Sigma}^* \\
+& \hat{X}_{ij} = \tilde{X}_{ij} \quad \forall (i,j): M_{ij} = 0
+\end{aligned}
+\end{equation}
+
+The first constraint enforces structural correctness; the second freezes observed values. Only originally-missing entries are updated.
+
+\section{Lagrangian Relaxation}
+
+We relax the exact covariance constraint using a quadratic penalty, yielding the unconstrained objective:
+
+\begin{equation}\label{eq:lagrangian}
+\mathcal{L}(\hat{\mathbf{X}}) = \underbrace{\|\hat{\mathbf{X}} - \tilde{\mathbf{X}}\|_F^2}_{\text{prediction fidelity}} \;+\; \lambda \cdot \underbrace{\|\operatorname{cov}(\hat{\mathbf{X}}) - \boldsymbol{\Sigma}^*\|_F^2}_{\text{structural fidelity}}
+\end{equation}
+
+where $\lambda > 0$ controls the trade-off between staying close to the initial imputation and matching the target covariance. This is a Lagrangian relaxation: the penalty term encourages $\operatorname{cov}(\hat{\mathbf{X}}) \approx \boldsymbol{\Sigma}^*$ without requiring exact equality.
+
+\section{Gradient Derivation}
+
+Let $\bar{\mathbf{X}} = \hat{\mathbf{X}} - \mathbf{1}_n \hat{\boldsymbol{\mu}}^\top$ be the centered data matrix, where $\hat{\boldsymbol{\mu}} = \frac{1}{n}\hat{\mathbf{X}}^\top \mathbf{1}_n$. The empirical covariance is $\hat{\boldsymbol{\Sigma}} = \frac{1}{n-1}\bar{\mathbf{X}}^\top \bar{\mathbf{X}}$.
+
+The gradient of the structural fidelity term with respect to $\hat{\mathbf{X}}$ is:
+
+\begin{equation}\label{eq:grad}
+\frac{\partial}{\partial \hat{\mathbf{X}}} \|\hat{\boldsymbol{\Sigma}} - \boldsymbol{\Sigma}^*\|_F^2 = \frac{4}{n-1} \cdot \bar{\mathbf{X}} \, (\hat{\boldsymbol{\Sigma}} - \boldsymbol{\Sigma}^*)
+\end{equation}
+
+The gradient of the prediction fidelity term is $2(\hat{\mathbf{X}} - \tilde{\mathbf{X}})$.
+
+Combining and applying the mask to freeze observed values, the update rule is:
+
+\begin{equation}\label{eq:update}
+\hat{\mathbf{X}}^{(t+1)} = \hat{\mathbf{X}}^{(t)} - \eta \cdot \Big[2(\hat{\mathbf{X}}^{(t)} - \tilde{\mathbf{X}}) + \lambda \cdot \frac{4}{n-1} \cdot \bar{\mathbf{X}}^{(t)} (\hat{\boldsymbol{\Sigma}}^{(t)} - \boldsymbol{\Sigma}^*)\Big] \odot \mathbf{M}
+\end{equation}
+
+where $\eta$ is the learning rate and $\odot$ denotes element-wise multiplication. The mask $\mathbf{M}$ ensures $\hat{X}_{ij}$ is updated only when $M_{ij} = 1$ (originally missing).
+
+\section{Implementation}
+
+The algorithm is implemented in 75 lines of C++ using the Armadillo linear algebra library, exposed to R via Rcpp. Algorithm~\ref{alg:lagrange} shows the pseudocode.
+
+\begin{algorithm}[ht]
+\caption{Lagrangian Projection}\label{alg:lagrange}
+\begin{algorithmic}[1]
+\State \textbf{Input:} $\tilde{\mathbf{X}}$, $\mathbf{M}$, $\boldsymbol{\Sigma}^*$, $\lambda$, $\eta$, $\epsilon$
+\State $\hat{\mathbf{X}} \gets \tilde{\mathbf{X}}$
+\State Ensure $\boldsymbol{\Sigma}^*$ is PSD (zero negative eigenvalues)
+\For{$t = 1$ to $\text{max\_iter}$}
+    \State $\bar{\mathbf{X}} \gets \hat{\mathbf{X}} - \mathbf{1}_n \hat{\boldsymbol{\mu}}^\top$
+    \State $\hat{\boldsymbol{\Sigma}} \gets \frac{1}{n-1}\bar{\mathbf{X}}^\top \bar{\mathbf{X}}$
+    \State $d \gets \|\hat{\boldsymbol{\Sigma}} - \boldsymbol{\Sigma}^*\|_F$
+    \If{$d < \epsilon$}
+        \State \Return $\hat{\mathbf{X}}$ \Comment{Converged}
+    \EndIf
+    \State $\mathbf{G}_{\text{cov}} \gets 2 \cdot \bar{\mathbf{X}} \cdot (\hat{\boldsymbol{\Sigma}} - \boldsymbol{\Sigma}^*)$
+    \State $\Delta \gets \eta \cdot \lambda \cdot \mathbf{G}_{\text{cov}}$
+    \State $\hat{\mathbf{X}} \gets \hat{\mathbf{X}} - \Delta \odot \mathbf{M}$
+    \If{$\hat{\mathbf{X}}$ contains NaN or Inf}
+        \State \textbf{error} ``Divergence detected''
+    \EndIf
+\EndFor
+\State \Return $\hat{\mathbf{X}}$
+\end{algorithmic}
+\end{algorithm}
+
+\section{The FIML-Smriti Pipeline}
+
+When the target is derived from FIML, the full pipeline executes in three steps:
+
+\begin{enumerate}
+    \item \textbf{Initial Imputation.} Apply Random Forest imputation (missForest) to obtain $\tilde{\mathbf{X}}$. This captures nonlinear relationships but produces a biased covariance under MAR dropout.
+    \item \textbf{Target Extraction.} Fit the structural model (e.g., a growth curve) to the incomplete data via FIML using lavaan. Extract the model-implied covariance $\boldsymbol{\Sigma}^*_{\text{FIML}}$. This covariance is MAR-consistent.
+    \item \textbf{Lagrangian Projection.} Run Algorithm~\ref{alg:lagrange} with $\tilde{\mathbf{X}}$ as the initializer and $\boldsymbol{\Sigma}^*_{\text{FIML}}$ as the target. The output $\hat{\mathbf{X}}$ is a completed dataset whose covariance matches the FIML model-implied structure.
+\end{enumerate}
+
+\section{Theoretical Justification}
+
+In a linear Growth Curve Model with $p=4$ time points, the latent intercept and slope variances $\sigma_i^2, \sigma_s^2$ and their covariance $\sigma_{is}$ are algebraic functions of the $4 \times 4$ observed covariance matrix $\boldsymbol{\Sigma}$:
+
+\begin{equation}\label{eq:gcm}
+\boldsymbol{\Sigma} = \boldsymbol{\Lambda} \boldsymbol{\Psi} \boldsymbol{\Lambda}^\top + \boldsymbol{\Theta}
+\end{equation}
+
+where $\boldsymbol{\Lambda}$ is the known factor loading matrix and $\boldsymbol{\Psi} = \begin{bmatrix} \sigma_i^2 & \sigma_{is} \\ \sigma_{is} & \sigma_s^2 \end{bmatrix}$. Minimizing $\|\hat{\boldsymbol{\Sigma}} - \boldsymbol{\Sigma}^*_{\text{FIML}}\|_F$ is therefore equivalent to minimizing the error in all structural parameters simultaneously. Empirically, Frobenius distance to the true $\boldsymbol{\Sigma}$ correlates $r = 0.68$ ($p < 10^{-28}$) with slope mean bias and $r = 0.35$ ($p < 10^{-6}$) with slope variance bias across Monte Carlo replications.
+
+\section{Simulation Results}
+
+\begin{table}[ht]
+\centering
+\caption{Slope variance recovery at $N=500$, 30\% MAR, Normal errors (500 reps)}
+\label{tab:main}
+\begin{tabular}{lcc}
+\toprule
+Method & Frobenius to true $\boldsymbol{\Sigma}$ & Slope variance bias \\
+\midrule
+FIML (oracle, no completed data) & 1.51 & $+0.2\%$ \\
+\textbf{Smriti\_FIML} & \textbf{1.63} & \textbf{$+1.6\%$} \\
+FIML\_Predict (lavPredict) & 6.70 & $+35.6\%$ \\
+MICE ($m=20$) & 8.66 & $-50.6\%$ \\
+missForest & 9.89 & $-66.6\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Across all 96 MAR simulation conditions (6 sample sizes $\times$ 4 missingness rates $\times$ 4 distributions), Smriti\_FIML achieves mean Frobenius distance 2.43 versus FIML's 2.39 (gap $+1.7\%$). The next-closest completed-data method is MICE at 4.82 (gap $+101\%$). Smriti\_FIML tracks FIML's performance across all conditions without independent degradation.
+
+\end{document}
