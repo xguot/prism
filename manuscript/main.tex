@@ -1,75 +1,136 @@
-\documentclass[12pt]{article}
+\documentclass[11pt]{article}
 \usepackage[margin=1in]{geometry}
-\usepackage{amsmath,amssymb}
-\usepackage{booktabs}
+\usepackage{amsmath, amssymb, amsthm}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
+\usepackage{bm}
+\usepackage{setspace}
 
-\title{smriti: Lagrangian Projection for Structure-Preserving Imputation}
+\title{Structure-Preserving Non-Parametric Imputation\\via Masked Covariance Projection}
 \author{}
+\date{}
 
+\begin{spacing}{1.15}
 \begin{document}
+
 \maketitle
 
-\section{Algorithm}
+\section{Problem Formulation}
+Let $\bm{X} \in \mathbb{R}^{n \times p}$ denote a dataset containing missing values, and let $\bm{M} \in \{0, 1\}^{n \times p}$ be the corresponding missingness indicator matrix, where $M_{ij} = 1$ if the entry is missing and $M_{ij} = 0$ if the entry is observed. We define $\bm{X}^{(0)}$ as the initial complete dataset generated via a non-parametric imputation method (e.g., Random Forest). 
 
-Given an initial imputation $\tilde{\mathbf{X}} \in \mathbb{R}^{n \times p}$, a missingness mask $\mathbf{M} \in \{0,1\}^{n \times p}$, and a target covariance $\boldsymbol{\Sigma}^* \in \mathbb{R}^{p \times p}$, minimize:
+While $\bm{X}^{(0)}$ captures complex, non-linear local relationships, it may violate the theoretical global covariance structure. Let $\bm{\Sigma}^* \in \mathbb{R}^{p \times p}$ be the unbiased target covariance matrix derived from Full Information Maximum Likelihood (FIML) under the Missing At Random (MAR) assumption. 
 
+Our goal is to find a refined matrix $\bm{X}^*$ that preserves the observed data exactly, while adjusting the imputed values such that the sample covariance of $\bm{X}^*$ matches $\bm{\Sigma}^*$.
+
+\section{Constrained Optimization and the Lagrangian}
+We frame this as a constrained optimization problem. We seek to minimize the squared Frobenius distance between the current sample covariance $\bm{\Sigma}(\bm{X})$ and the target covariance $\bm{\Sigma}^*$, subject to the strict constraint that no observed values are altered.
+
+The objective function is defined as:
 \begin{equation}
-\mathcal{L}(\hat{\mathbf{X}}) = \|\hat{\mathbf{X}} - \tilde{\mathbf{X}}\|_F^2 \;+\; \lambda \cdot \|\operatorname{cov}(\hat{\mathbf{X}}) - \boldsymbol{\Sigma}^*\|_F^2
+    f(\bm{X}) = \frac{1}{2} \big\| \bm{\Sigma}(\bm{X}) - \bm{\Sigma}^* \big\|_F^2
 \end{equation}
 
-subject to $\hat{X}_{ij} = \tilde{X}_{ij}$ wherever $M_{ij} = 0$ (observed values frozen).
-
-\textbf{Gradient.} Let $\bar{\mathbf{X}} = \hat{\mathbf{X}} - \mathbf{1}_n\hat{\boldsymbol{\mu}}^\top$, $\hat{\boldsymbol{\Sigma}} = \frac{1}{n-1}\bar{\mathbf{X}}^\top\bar{\mathbf{X}}$. Then:
-
+The equality constraint for the observed data can be expressed using the Hadamard product ($\odot$):
 \begin{equation}
-\frac{\partial}{\partial \hat{\mathbf{X}}} \|\hat{\boldsymbol{\Sigma}} - \boldsymbol{\Sigma}^*\|_F^2 = \frac{4}{n-1} \cdot \bar{\mathbf{X}} \, (\hat{\boldsymbol{\Sigma}} - \boldsymbol{\Sigma}^*)
+    \bm{X} \odot (\bm{1} - \bm{M}) = \bm{X}^{(0)} \odot (\bm{1} - \bm{M})
 \end{equation}
 
-\textbf{Update.} $\hat{\mathbf{X}} \leftarrow \hat{\mathbf{X}} - \eta \cdot \lambda \cdot 2\bar{\mathbf{X}}(\hat{\boldsymbol{\Sigma}} - \boldsymbol{\Sigma}^*) \odot \mathbf{M}$
+To solve this, we define the Lagrangian:
+\begin{equation}
+    \mathcal{L}(\bm{X}, \bm{\Lambda}) = \frac{1}{2} \big\| \bm{\Sigma}(\bm{X}) - \bm{\Sigma}^* \big\|_F^2 + \text{Tr}\Big( \bm{\Lambda}^T \big( \bm{X} \odot (\bm{1} - \bm{M}) - \bm{X}^{(0)} \odot (\bm{1} - \bm{M}) \big) \Big)
+\end{equation}
+where $\bm{\Lambda} \in \mathbb{R}^{n \times p}$ is the matrix of Lagrange multipliers. The Karush-Kuhn-Tucker (KKT) stationarity condition requires that the gradient of the Lagrangian with respect to $\bm{X}$ is zero at the optimum:
+\begin{equation}
+    \nabla_{\bm{X}} \mathcal{L}(\bm{X}, \bm{\Lambda}) = \nabla_{\bm{X}} f(\bm{X}) + \bm{\Lambda} \odot (\bm{1} - \bm{M}) = \mathbf{0}
+\end{equation}
 
-\begin{algorithm}[ht]
-\caption{Lagrangian Projection (75 lines C++)}
+This stationarity condition reveals a critical property of the spatial geometry: for the observed entries ($M_{ij} = 0$), the gradient of the loss is perfectly offset by the dual variables $\bm{\Lambda}$. For the missing entries ($M_{ij} = 1$), the dual variable vanishes, and the update strictly follows the gradient of the primal objective $\nabla_{\bm{X}} f(\bm{X})$. 
+
+Therefore, applying a standard gradient descent step that is strictly masked by $\bm{M}$ is equivalent to a projected gradient descent on the feasible affine subspace of the Lagrangian dual.
+
+\section{Gradient Derivation}
+To compute the unconstrained gradient $\nabla_{\bm{X}} f(\bm{X})$, we first define the sample covariance. Let $\bm{H} = \bm{I} - \frac{1}{n}\bm{1}\bm{1}^T$ be the centering matrix. The centered data is $\bm{X}_c = \bm{H}\bm{X}$, and the sample covariance is:
+\begin{equation}
+    \bm{\Sigma}(\bm{X}) = \frac{1}{n-1} \bm{X}^T \bm{H} \bm{X} = \frac{1}{n-1} \bm{X}_c^T \bm{X}_c
+\end{equation}
+
+Applying the chain rule for matrix differentiation to $f(\bm{X})$, the exact gradient is:
+\begin{equation}
+    \nabla_{\bm{X}} f(\bm{X}) = \frac{2}{n-1} \bm{H} \bm{X} \big( \bm{\Sigma}(\bm{X}) - \bm{\Sigma}^* \big) = \frac{2}{n-1} \bm{X}_c \big( \bm{\Sigma}(\bm{X}) - \bm{\Sigma}^* \big)
+\end{equation}
+
+In practice, the scalar $\frac{1}{n-1}$ is merged into the learning rate, leaving the gradient direction unchanged.
+
+\section{Algorithmic Implementation}
+Algorithm \ref{alg:projection} outlines the projected gradient descent procedure. To ensure numerical stability, the algorithm applies an eigenvalue decomposition to $\bm{\Sigma}^*$ to project it onto the positive semi-definite (PSD) cone prior to iteration.
+
+\begin{algorithm}[H]
+\caption{Masked Covariance Projection via Gradient Descent}
+\label{alg:projection}
 \begin{algorithmic}[1]
-\State \textbf{Input:} $\tilde{\mathbf{X}}$, $\mathbf{M}$, $\boldsymbol{\Sigma}^*$, $\lambda$, $\eta$, $\epsilon$
-\State $\hat{\mathbf{X}} \gets \tilde{\mathbf{X}}$
-\State Ensure $\boldsymbol{\Sigma}^* \succeq 0$ (zero negative eigenvalues)
-\For{$t = 1$ to $\text{max\_iter}$}
-    \State $\bar{\mathbf{X}} \gets \hat{\mathbf{X}} - \mathbf{1}_n\hat{\boldsymbol{\mu}}^\top$
-    \State $\hat{\boldsymbol{\Sigma}} \gets \frac{1}{n-1}\bar{\mathbf{X}}^\top\bar{\mathbf{X}}$
-    \If{$\|\hat{\boldsymbol{\Sigma}} - \boldsymbol{\Sigma}^*\|_F < \epsilon$} \Return $\hat{\mathbf{X}}$ \EndIf
-    \State $\mathbf{G} \gets 2 \cdot \bar{\mathbf{X}} \cdot (\hat{\boldsymbol{\Sigma}} - \boldsymbol{\Sigma}^*)$
-    \State $\hat{\mathbf{X}} \gets \hat{\mathbf{X}} - (\eta \cdot \lambda) \cdot \mathbf{G} \odot \mathbf{M}$
-\EndFor
-\State \Return $\hat{\mathbf{X}}$
+\Require Initial imputed matrix $\bm{X}^{(0)} \in \mathbb{R}^{n \times p}$
+\Require Missingness mask $\bm{M} \in \{0, 1\}^{n \times p}$
+\Require Target covariance $\bm{\Sigma}^* \in \mathbb{R}^{p \times p}$
+\Require Base learning rate $\alpha$, scaling penalty $\lambda$, tolerance $\epsilon$, max iterations $T$
+
+\State \textbf{PSD Guard:} Ensure $\bm{\Sigma}^*$ is positive semi-definite
+\State Compute eigenvalues $\bm{v}$ and eigenvectors $\bm{Q}$ of $\bm{\Sigma}^*$
+\If{$\min(\bm{v}) < 0$}
+    \State $v_j \leftarrow \max(v_j, 0) \quad \forall j \in \{1, \dots, p\}$
+    \State $\bm{\Sigma}^* \leftarrow \bm{Q} \text{diag}(\bm{v}) \bm{Q}^T$
+\EndIf
+
+\State $\bm{X} \leftarrow \bm{X}^{(0)}$
+\State $t \leftarrow 0$
+
+\While{$t < T$}
+    \State $\bm{\mu} \leftarrow \frac{1}{n} \bm{X}^T \bm{1}$ \Comment{Calculate column means}
+    \State $\bm{X}_c \leftarrow \bm{X} - \bm{1}\bm{\mu}^T$ \Comment{Mean-center the data}
+    \State $\bm{\Sigma}^{(t)} \leftarrow \frac{1}{n-1} \bm{X}_c^T \bm{X}_c$ \Comment{Current sample covariance}
+    
+    \State $\Delta \leftarrow \big\| \bm{\Sigma}^{(t)} - \bm{\Sigma}^* \big\|_F$ \Comment{Frobenius distance}
+    \If{$\Delta < \epsilon$}
+        \State \textbf{break} \Comment{Convergence achieved}
+    \EndIf
+    
+    \State $\nabla_{\text{cov}} \leftarrow 2 \bm{X}_c \big(\bm{\Sigma}^{(t)} - \bm{\Sigma}^*\big)$ \Comment{Calculate gradient direction}
+    
+    \State $\bm{X} \leftarrow \bm{X} - (\alpha \cdot \lambda) \big( \nabla_{\text{cov}} \odot \bm{M} \big)$ \Comment{Masked Lagrangian gradient update}
+    
+    \State $t \leftarrow t + 1$
+\EndWhile
+
+\Ensure Refined structure-preserving matrix $\bm{X}$
 \end{algorithmic}
 \end{algorithm}
 
-\section{Pipeline}
+\section{The FIML-Smriti Pipeline}
 
-\textbf{Step 1.} missForest $\to$ initial imputation $\tilde{\mathbf{X}}$.
+\textbf{Step 1.} Non-parametric imputation (e.g., Random Forest) produces an initial complete dataset $\bm{X}^{(0)}$ with high point-level accuracy.
 
-\textbf{Step 2.} lavaan FIML $\to$ model-implied $\boldsymbol{\Sigma}^*_{\text{FIML}}$.
+\textbf{Step 2.} The structural model is fit to the incomplete data via FIML, yielding the model-implied covariance $\bm{\Sigma}^*_{\text{FIML}}$, which is MAR-consistent.
 
-\textbf{Step 3.} Run Algorithm~1 with $\tilde{\mathbf{X}}$ and $\boldsymbol{\Sigma}^*_{\text{FIML}}$. Output $\hat{\mathbf{X}}$ is a completed dataset with $\operatorname{cov}(\hat{\mathbf{X}}) \approx \boldsymbol{\Sigma}^*_{\text{FIML}}$.
+\textbf{Step 3.} Algorithm~\ref{alg:projection} projects $\bm{X}^{(0)}$ toward $\bm{\Sigma}^*_{\text{FIML}}$, updating only the originally-missing entries. The output $\bm{X}$ is a completed dataset with $\operatorname{cov}(\bm{X}) \approx \bm{\Sigma}^*_{\text{FIML}}$.
 
-\section{Key Result}
+The projection engine is model-agnostic: replacing the FIML target with a robust estimator (Spearman correlation with MAD scaling) yields outlier-resistant imputation without modifying Algorithm~\ref{alg:projection}.
 
-$N=500$, 30\% MAR, Normal errors, 500 reps:
+\section{Simulation Result}
+
+$N=500$, 30\% MAR, Normal errors, 500 Monte Carlo replications:
 
 \begin{table}[ht]
 \centering
 \begin{tabular}{lcc}
 \toprule
-Method & $\|\hat{\boldsymbol{\Sigma}} - \boldsymbol{\Sigma}_{\text{true}}\|_F$ & Slope variance bias \\
+Method & $\|\hat{\bm{\Sigma}} - \bm{\Sigma}_{\text{true}}\|_F$ & Slope variance bias \\
 \midrule
 FIML (no completed data) & 1.51 & $+0.2\%$ \\
 \textbf{Smriti\_FIML} & \textbf{1.63} & \textbf{$+1.6\%$} \\
-FIML\_Predict & 6.70 & $+35.6\%$ \\
+FIML\_Predict (lavPredict) & 6.70 & $+35.6\%$ \\
 missForest & 9.89 & $-66.6\%$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \end{document}
+\end{spacing}
