@@ -111,7 +111,15 @@ Algorithm \ref{alg:projection} outlines the projected gradient descent procedure
 
 \textbf{Step 3.} Algorithm~\ref{alg:projection} projects $\bm{X}^{(0)}$ toward $\bm{\Sigma}^*_{\text{FIML}}$, updating only the originally-missing entries. The output $\bm{X}$ is a completed dataset with $\operatorname{cov}(\bm{X}) \approx \bm{\Sigma}^*_{\text{FIML}}$.
 
-The projection engine is model-agnostic: replacing the FIML target with a robust estimator (Spearman correlation with MAD scaling) yields outlier-resistant imputation without modifying Algorithm~\ref{alg:projection}.
+\textbf{Target variants.} The engine accepts any $\bm{\Sigma}^*$. Three instantiations are evaluated:
+
+\begin{itemize}
+    \item \textbf{Smriti\_Default.} $\bm{\Sigma}^*$ estimated via pairwise Pearson covariance. Fast, but biased under MAR dropout (conditioning on survivors).
+    \item \textbf{Smriti\_Robust.} $\bm{\Sigma}^*$ estimated via pairwise Spearman correlation scaled by column-wise MAD, projected to the PSD cone. Resistant to outlier contamination but still suffers from pairwise deletion bias under MAR.
+    \item \textbf{Smriti\_FIML.} $\bm{\Sigma}^*$ is the FIML model-implied covariance from a lavaan structural model. MAR-consistent.
+\end{itemize}
+
+All three use the identical projection engine (Algorithm~\ref{alg:projection}); they differ only in the source of $\bm{\Sigma}^*$.
 
 \section{Simulation Result}
 
@@ -125,6 +133,8 @@ Method & $\|\hat{\bm{\Sigma}} - \bm{\Sigma}_{\text{true}}\|_F$ & Slope variance 
 \midrule
 FIML (no completed data) & 1.51 & $+0.2\%$ \\
 \textbf{Smriti\_FIML} & \textbf{1.63} & \textbf{$+1.6\%$} \\
+Smriti\_Robust & 8.53 & $-37.9\%$ \\
+Smriti\_Default & 9.30 & $-45.1\%$ \\
 FIML\_Predict (lavPredict) & 6.70 & $+35.6\%$ \\
 missForest & 9.89 & $-66.6\%$ \\
 \bottomrule
