@@ -14,4 +14,6 @@ sim_plots/
 manuscript_figures/
 smriti.Rcheck/
 simulation.log
-build/
+manuscript/build/
+*.aux
+*.log
