@@ -82,12 +82,42 @@ Rcpp::List constrain_covariance(const arma::mat& X_imp,
 
     /* covariance-constraint gradient (un-normalised) */
     grad_cov = 2.0 * X_centered * (Sigma_curr - Sigma_fixed);
-    update_step = (lr * lambda) * grad_cov;
 
-    /* gradient step (masked: only update originally-missing cells) */
-    X_opt -= (update_step % mask);
+    /* Armijo backtracking line search to guarantee monotonic descent */
+    double alpha = lr;
+    double tau = 0.5;
 
-    /* guard against numerical blow-up */
+    arma::mat X_opt_new, X_c_new, Sigma_new;
+    double new_frob;
+
+    while (true) {
+      /* propose a step using the current alpha */
+      update_step = (alpha * lambda) * grad_cov;
+      X_opt_new = X_opt - (update_step % mask);
+
+      /* evaluate the covariance and distance of the proposed step */
+      X_c_new = X_opt_new.each_row() - arma::mean(X_opt_new, 0);
+      Sigma_new = (X_c_new.t() * X_c_new) / (n - 1.0);
+      new_frob = arma::norm(Sigma_new - Sigma_fixed, "fro");
+
+      /* sufficient decrease condition */
+      if (new_frob < final_frob) {
+        break;
+      }
+
+      /* backtrack */
+      alpha *= tau;
+
+      /* safety guard against numerical precision floor */
+      if (alpha < 1e-8) {
+        break;
+      }
+    }
+
+    /* commit the successful step */
+    X_opt = X_opt_new;
+
+    /* guard against numerical blow-up (extremely unlikely with Armijo) */
     if (X_opt.has_nan() || X_opt.has_inf()) {
       Rcpp::stop("Divergence detected: NaN or Inf produced during gradient descent.");
     }
