@@ -4,7 +4,7 @@
 #SBATCH -t 12:00:00
 #SBATCH --array=1-54
 #SBATCH -A tongx
-#SBATCH -J smriti_tune
+#SBATCH -J lagrange_tune
 #SBATCH -o hpc/logs/tune_%A_%a.out
 #SBATCH -e hpc/logs/tune_%A_%a.err
 #SBATCH --mem=16G

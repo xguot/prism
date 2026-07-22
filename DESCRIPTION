@@ -1,30 +1,26 @@
-Package: smriti
-Title: Automated Routing Engine for Longitudinal Missing Data
+Package: lagrange
+Title: FIML Covariance Projection for Longitudinal Missing Data
 Version: 0.2.0
 Authors@R: person("Xiyuan", "Guo", email = "tommyguo039@gmail.com", role = c("aut", "cre"))
-Description: Provides an automated routing engine for longitudinal missing 
-    data. It utilizes a Lagrange-constrained Random Forest based on sample 
-    size, missingness rate, and skew to preserve structural variance.
+Description: Fits a latent growth model via FIML, extracts the model-implied
+    covariance matrix, and projects an initial imputation onto that structural
+    manifold using Lagrangian-constrained gradient descent. Supports both
+    single imputation (lagrange_fiml) and proper multiple imputation via
+    parameter perturbation (lagrange_mi).
 License: MIT + file LICENSE
 SystemRequirements: C++17
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 VignetteBuilder: knitr
-Imports: 
+Imports:
+    MASS,
     Rcpp (>= 1.0.0)
-Suggests: 
-    missForest,
-    missRanger,
-    ranger,
-    mice,
+Suggests:
     lavaan,
-    ggplot2,
-    tidyr,
-    dplyr,
+    mice,
     knitr,
-    rmarkdown,
-    MASS
-LinkingTo: 
+    rmarkdown
+LinkingTo:
     Rcpp,
     RcppArmadillo
 Config/roxygen2/version: 8.0.0

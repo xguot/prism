@@ -7,7 +7,7 @@
 
 ```json
 {
-  "project_name": "smriti",
+  "project_name": "lagrange",
   "directory_structure": [
     "README.md",
     "src/lagrange.cpp",
@@ -28,39 +28,23 @@
     "hpc/simulation_production.R",
     "hpc/simulation_tune.R",
     "LICENSE",
-    "man/smriti_fiml.Rd",
-    "man/smriti_forest.Rd",
-    "man/smriti_impute.Rd",
-    "man/smriti_mi.Rd",
-    "man/smriti_mice.Rd",
-    "man/smriti_ranger.Rd",
+    "man/lagrange_fiml.Rd",
     "manuscript_analysis.R",
     "manuscript_plots.R",
     "NAMESPACE",
     "R/RcppExports.R",
-    "R/router.R",
-    "R/smriti-package.R",
-    "R/smriti_fiml.R",
-    "R/smriti_mi.R",
-    "R/wrappers.R",
-    "ROADMAP.md",
-    "sim_results/prod_results.rds",
-    "sim_results/table1_frobenius_main.csv",
-    "sim_results/table2_frobenius_by_N.csv",
-    "sim_results/table3_frobenius_by_miss.csv",
-    "sim_results/table4_slope_bias.csv",
-    "sim_results/table5_outlier_impact.csv",
-    "sim_results/table7_timing.csv",
+    "R/lagrange-package.R",
+    "R/lagrange_fiml.R",
+    "R/lagrange_project.R",
     "src/.gitignore",
     "src/Makevars",
     "src/Makevars.win",
     "tests/test_imputation.R",
-    "vignettes/introduction.Rmd",
-    "vignettes/outlier-robust.Rmd"
+    "vignettes/introduction.Rmd"
   ],
   "readme": {
     "path": "README.md",
-    "excerpt": "# smriti\n\n[![CRAN status](https://www.r-pkg.org/badges/version/smriti)](https://CRAN.R-project.org/package=smriti) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)\n\n**smriti** is an R package for automated longitudinal missing data imputation. It combines the predictive flexibility of non-parametric machine learning with a C++ Lagrangian projection engine to strictly preserve the structural variance of the target covariance manifold.\n\n## Installation\n\n```R\n# Stable CRAN release\ninstall.packages(\"smriti\")\n\n# Development version\n# install.packages(\"devtools\")\ndevtools::install_github(\"xguot/smriti\")\n```\n\n## Usage\n\nImpute longitudinal missing data while preserving the underlying covariance structure:\n\n```R\nlibrary(smriti)\n\nimputed_data <- smriti_impute(\n  data = clinical_df, \n  time_cols = c(\"V1\", \"V2\", \"V3\", \"V4\"),\n  lambda = 0.5,\n  robust = TRUE  # Enables Spearman + MAD robust estimation\n)\n```\n\n## Architecture\n\nThe imputation pipeline executes in three phases:\n\n1. **Initialization:** Generates a dense preliminary point-cloud via Random Forest (missForest).\n2. **Manifold Mapping:** Establishes the target covariance structure from observed data, with optional robust estimation.\n3. **Lagrangian Routing:** Projects the initial matrix back onto the structural manifold via a constrained gradient descent update.\n\n## Citation\n\nIf you utilize **smriti** in your research, please cite:\n\n> Guo, X. (2026). smriti: Structural Variance Preservation for Longitudinal Missing Data Imputation. R package version 0.1.0."
+    "excerpt": "# lagrange\n\n**lagrange** is an R package that produces a completed longitudinal dataset whose covariance structure matches the model-implied covariance from a FIML-estimated latent growth model. It fits the model via `lavaan`, extracts the structural target, and projects an initial imputation onto that manifold using a C++ Lagrangian-constrained gradient descent engine."
   },
   "config_files": [],
   "key_source_files": [

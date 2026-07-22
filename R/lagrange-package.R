@@ -1,5 +1,5 @@
 ## usethis namespace: start
 #' @importFrom Rcpp sourceCpp
-#' @useDynLib smriti, .registration = TRUE
+#' @useDynLib lagrange, .registration = TRUE
 ## usethis namespace: end
 NULL

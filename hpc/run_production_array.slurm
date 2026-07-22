@@ -4,7 +4,7 @@
 #SBATCH -t 12:00:00
 #SBATCH --array=1-192
 #SBATCH -A tongx
-#SBATCH -J smriti_prod
+#SBATCH -J lagrange_prod
 #SBATCH -o hpc/logs/prod_%A_%a.out
 #SBATCH -e hpc/logs/prod_%A_%a.err
 #SBATCH --mem=16G

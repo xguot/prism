@@ -1,45 +1,56 @@
-# smriti
+# lagrange
 
-[![CRAN status](https://www.r-pkg.org/badges/version/smriti)](https://CRAN.R-project.org/package=smriti) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**smriti** is an R package for automated longitudinal missing data imputation. It combines the predictive flexibility of non-parametric machine learning with a C++ Lagrangian projection engine to strictly preserve the structural variance of the target covariance manifold.
+**lagrange** is an R package that produces a completed longitudinal dataset whose covariance structure matches the model-implied covariance from a FIML-estimated latent growth model. It fits the model via `lavaan`, extracts the structural target, and projects an initial imputation onto that manifold using a C++ Lagrangian-constrained gradient descent engine.
 
 ## Installation
 
 ```R
-# Stable CRAN release
-install.packages("smriti")
-
 # Development version
 # install.packages("devtools")
-devtools::install_github("xguot/smriti")
+devtools::install_github("xguot/lagrange")
 ```
 
 ## Usage
 
-Impute longitudinal missing data while preserving the underlying covariance structure:
-
 ```R
-library(smriti)
+library(lagrange)
+library(lavaan)
 
-imputed_data <- smriti_impute(
-  data = clinical_df, 
-  time_cols = c("V1", "V2", "V3", "V4"),
-  lambda = 0.5,
-  robust = TRUE  # Enables Spearman + MAD robust estimation
+# Define a latent growth model
+model <- "
+  i =~ 1*T1 + 1*T2 + 1*T3 + 1*T4
+  s =~ 0*T1 + 1*T2 + 2*T3 + 3*T4
+"
+
+# Impute missing values while preserving the FIML-implied structure
+imputed_data <- lagrange_fiml(
+  data   = clinical_df,
+  model  = model,
+  lambda = 0.5
 )
 ```
 
 ## Architecture
 
-The imputation pipeline executes in three phases:
+The pipeline executes in two phases:
 
-1. **Initialization:** Generates a dense preliminary point-cloud via Random Forest (missForest).
-2. **Manifold Mapping:** Establishes the target covariance structure from observed data, with optional robust estimation.
-3. **Lagrangian Routing:** Projects the initial matrix back onto the structural manifold via a constrained gradient descent update.
+1. **FIML Estimation:** A latent growth model is fit to the incomplete data via full-information maximum likelihood (`lavaan::growth`). The model-implied covariance matrix Σ_FIML is extracted as the structural target.
+2. **Lagrangian Projection:** An initial imputation (user-supplied or column-mean fallback) is projected onto the Σ_FIML manifold via constrained gradient descent. Only originally-missing cells are updated; observed data is held fixed.
+
+The C++ engine minimizes:
+
+$$L(X) = \|\operatorname{cov}(X) - \Sigma_{\text{FIML}}\|_F^2$$
+
+subject to observed cells frozen in place.
+
+## Why lagrange
+
+FIML estimates parameters correctly under MAR but does not fill in missing values. `lavPredict(type="ov")` (conditional expectations) attenuates variance by 40–60%. lagrange produces a completed dataset whose structural parameters match the FIML model without variance attenuation — enabling downstream analyses that require complete data.
 
 ## Citation
 
-If you utilize **smriti** in your research, please cite:
+If you use **lagrange** in your research, please cite:
 
-> Guo, X. (2026). smriti: Structural Variance Preservation for Longitudinal Missing Data Imputation. R package version 0.1.0.
+> Guo, X. (2026). lagrange: FIML Covariance Projection for Longitudinal Missing Data. R package version 0.2.0.

@@ -1,46 +1,74 @@
-# ══════════════════════════════════════════════════════════════════════════════
-# Manuscript-Level Performance Plots for smriti
-# Style adapted from mda/analysis.R — heatmaps, MSE bars, cleaner facets
-# Uses prod_results.rds
-# ══════════════════════════════════════════════════════════════════════════════
+#!/usr/bin/env Rscript
+# lagrange manuscript figures — exact mda plotting style.
+#
+# Theme, color, line-type, facet, and sizing conventions are taken verbatim
+# from appendix_plots_from_tex.R and plot_results.R.  Every figure uses the
+# same theme_mda() and scale_method_aes blocks so the output is visually
+# uniform and matches the mda canon.
+#
+# Output (22 plots → figs/, 7 imputation methods, FIML excluded — it estimates
+# parameters but does not produce completed data):
+#   fig1a_frobenius_overview_mar.pdf         facet_grid(dist ~ N_label)
+#   fig1b_frobenius_overview_mnar.pdf
+#   fig1c_frobenius_perdist_mar.pdf          facet_wrap(~ N_label, ncol=3) per dist
+#   fig1d_frobenius_perdist_mnar.pdf
+#   fig2a_slope_bias_overview_mar.pdf        facet_grid(dist ~ N_label)
+#   fig2b_slope_bias_overview_mnar.pdf
+#   fig2c_slope_bias_perdist_mar.pdf         facet_wrap(~ N_label, ncol=3) per dist
+#   fig2d_slope_bias_perdist_mnar.pdf
+#   fig3_relbias_heatmap.pdf                tile heatmap, gradient2, MAR pooled
+#   fig4_outlier_degradation.pdf            bar chart, Δ Frobenius Normal→Outlier
 
-library(ggplot2)
-library(dplyr)
-library(tidyr)
+suppressPackageStartupMessages({
+  library(ggplot2)
+  library(dplyr)
+  library(tidyr)
+})
 
-# ── Shared plot theme ─────────────────────────────────────────────────────────
-theme_smriti <- function(legend_pos = "bottom") {
+# ══════════════════════════════════════════════════════════════════════════════
+# Shared theme — exact copy of mda theme
+# ══════════════════════════════════════════════════════════════════════════════
+theme_mda <- function(legend_pos = "bottom") {
   theme_bw() +
     theme(
       legend.position      = legend_pos,
       legend.text          = element_text(size = 8),
+      legend.title         = element_blank(),
       legend.background    = element_blank(),
-      legend.key.width     = unit(1.2, "cm"),
+      legend.key.width     = unit(0.8, "cm"),
+      legend.spacing.x     = unit(0.2, "cm"),
+      legend.margin        = margin(t = 0, r = 0, b = 0, l = 0),
       strip.text           = element_text(size = 9, face = "bold"),
-      axis.title           = element_text(size = 10),
+      axis.title           = element_text(size = 10, face = "bold"),
       axis.text            = element_text(size = 8),
-      panel.grid.minor     = element_blank()
+      panel.grid.minor     = element_blank(),
+      legend.direction     = "horizontal"
     )
 }
 
-# ── Shared colour / linetype scale ───────────────────────────────────────────
-method_levels <- c("FIML", "FIML_Predict", "MICE", "missForest", "missRanger",
-                   "Smriti_FIML", "Smriti_Default", "Smriti_Robust")
-method_colors <- c(
-  "FIML"           = "#999999",
-  "FIML_Predict"   = "#B0B0B0",
-  "MICE"           = "#56B4E9",
-  "missForest"     = "#009E73",
-  "missRanger"     = "#0072B5",
-  "Smriti_FIML"    = "#E6A000",
-  "Smriti_Default" = "#D55E00",
-  "Smriti_Robust"  = "#CC0000"
+# ══════════════════════════════════════════════════════════════════════════════
+# Shared scales — mda color palette for baselines, warm tones for Smriti
+# ══════════════════════════════════════════════════════════════════════════════
+method_levels <- c(
+  "FIML_Predict", "MICE", "missForest", "missRanger",
+  "Smriti_FIML", "Smriti_Default", "Smriti_Robust"
 )
+
+method_colors <- c(
+  "FIML_Predict"   = "#00BFC4",   # teal — naive FIML completed
+  "MICE"           = "#4DAF4A",   # green — multiple imputation
+  "missForest"     = "#984EA3",   # purple — ML single imputation
+  "missRanger"     = "#FF7F00",   # orange — fast ML baseline
+  "Smriti_FIML"    = "#E41A1C",   # red — primary proposed method
+  "Smriti_Default" = "#A65628",   # brown — pairwise-target variant
+  "Smriti_Robust"  = "#F781BF"    # pink — robust variant
+)
+
+# Solid for proposed methods, dashed/dotted for baselines
 method_linetypes <- c(
-  "FIML"           = "dotted",
   "FIML_Predict"   = "dotted",
-  "MICE"           = "dashed",
-  "missForest"     = "dashed",
+  "MICE"           = "dotdash",
+  "missForest"     = "longdash",
   "missRanger"     = "dotted",
   "Smriti_FIML"    = "solid",
   "Smriti_Default" = "solid",
@@ -49,17 +77,24 @@ method_linetypes <- c(
 
 scale_method_aes <- list(
   scale_color_manual(values = method_colors, breaks = method_levels),
-  scale_linetype_manual(values = method_linetypes, breaks = method_levels)
+  scale_linetype_manual(values = method_linetypes, breaks = method_levels),
+  guides(color = guide_legend(nrow = 1), linetype = guide_legend(nrow = 1))
 )
 
-# ── Labels ────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Labels and constants
+# ══════════════════════════════════════════════════════════════════════════════
 dist_levels  <- c("Normal", "t5", "Outlier", "Lognormal")
 dist_labels  <- c("Normal", "Student t(5)", "5% Outliers", "Lognormal")
-miss_levels  <- c("5%", "10%", "15%", "30%")
-N_levels     <- c("N = 100", "N = 200", "N = 500", "N = 1k", "N = 5k", "N = 10k")
 
-beta_true   <- c(psi_L = 1, psi_S = 1, psi_LS = 0, beta_L = 6, beta_S = 2)
-param_names <- names(beta_true)
+miss_breaks  <- c(0.05, 0.10, 0.15, 0.30)
+miss_labels  <- c("5%", "10%", "15%", "30%")
+
+N_levels     <- c("N = 100", "N = 200", "N = 500",
+                  "N = 1k", "N = 5k", "N = 10k")
+
+beta_true    <- c(psi_L = 1, psi_S = 1, psi_LS = 0, beta_L = 6, beta_S = 2)
+param_names  <- names(beta_true)
 param_labels_tex <- c(
   psi_L  = "sigma[L]^2",
   psi_S  = "sigma[S]^2",
@@ -68,20 +103,24 @@ param_labels_tex <- c(
   beta_S = "beta[S]"
 )
 
-dir.create("manuscript_figures", showWarnings = FALSE, recursive = TRUE)
+dir.create("figs", showWarnings = FALSE, recursive = TRUE)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Load & preprocess
+# Load and preprocess
 # ══════════════════════════════════════════════════════════════════════════════
+cat("Loading prod_results.rds ...\n")
 prod <- readRDS("sim_results/prod_results.rds")
+prod <- prod %>% filter(method != "FIML")
+
 prod$method   <- factor(prod$method, levels = method_levels)
 prod$dist     <- factor(prod$dist, levels = dist_levels, labels = dist_labels)
-prod$N_label  <- factor(paste0("N = ", ifelse(prod$N >= 1000,
-                           paste0(prod$N / 1000, "k"), prod$N)),
-                        levels = N_levels)
-prod$miss_pct <- factor(paste0(prod$miss * 100, "%"), levels = miss_levels)
+prod$N_label  <- factor(
+  paste0("N = ", ifelse(prod$N >= 1000, paste0(prod$N / 1000, "k"), prod$N)),
+  levels = N_levels
+)
+prod$miss_pct <- factor(paste0(prod$miss * 100, "%"), levels = miss_labels)
 
-# Aggregate
+# Aggregate across Monte Carlo replicates
 agg <- prod %>%
   group_by(N, N_label, miss, miss_pct, dist, mech, method) %>%
   summarise(
@@ -95,7 +134,7 @@ agg <- prod %>%
     .groups   = "drop"
   )
 
-# ── Per-parameter long table for heatmap / MSE plots ────────────────────────
+# Per-parameter long table (for heatmap)
 est_cols <- c(
   psi_L  = "est_var_L",  psi_S  = "est_var_S", psi_LS = "est_cov_LS",
   beta_L = "est_L",       beta_S = "est_S"
@@ -115,34 +154,135 @@ all_params <- do.call(rbind, lapply(param_names, function(pn) {
 }))
 
 # ══════════════════════════════════════════════════════════════════════════════
-# FIGURE 1 — Frobenius Distance by Missingness Rate (MAR, headline line plot)
+# ── Helper: overview plot (facet_grid) ───────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
-cat("Figure 1: Frobenius Distance by Missingness Rate (MAR)\n")
+make_overview <- function(data, y_var, y_label, title_prefix) {
+  p <- ggplot(data, aes(x = miss, y = .data[[y_var]], group = method)) +
+    geom_line(aes(linetype = method, color = method), linewidth = 0.5) +
+    geom_point(aes(color = method), size = 1.0) +
+    scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
+    scale_method_aes +
+    facet_grid(dist ~ N_label, scales = "free_y") +
+    labs(x = "Missingness Rate", y = y_label,
+         title = title_prefix) +
+    theme_mda()
+  p
+}
 
-fig1 <- agg %>% filter(mech == "MAR")
-
-p1 <- ggplot(fig1, aes(x = miss, y = f_dist_mean, group = method)) +
-  geom_line(aes(linetype = method, color = method), linewidth = 0.6) +
-  geom_point(aes(color = method), size = 1.5) +
-  scale_x_continuous(
-    breaks = c(0.05, 0.10, 0.15, 0.30),
-    labels = c("5%", "10%", "15%", "30%")
-  ) +
-  scale_method_aes +
-  facet_grid(dist ~ N_label) +
-  labs(x = "Missingness Rate",
-       y = "Frobenius Distance to True Covariance") +
-  theme_smriti()
-
-ggsave("manuscript_figures/fig1_frobenius_by_miss.pdf",
-       plot = p1, width = 27, height = 18, units = "cm")
-ggsave("manuscript_figures/fig1_frobenius_by_miss.png",
-       plot = p1, width = 27, height = 18, units = "cm", dpi = 300)
+# ── Helper: per-distribution plot (facet_wrap) ───────────────────────────────
+make_perdist <- function(data, y_var, y_label, title_template) {
+  p <- ggplot(data, aes(x = miss, y = .data[[y_var]], group = method)) +
+    geom_line(aes(linetype = method, color = method), linewidth = 0.5) +
+    geom_point(aes(color = method), size = 1.0) +
+    scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
+    scale_method_aes +
+    facet_wrap(~ N_label, ncol = 3, scales = "free_y") +
+    labs(x = "Missingness Rate", y = y_label,
+         title = title_template) +
+    theme_mda()
+  p
+}
 
 # ══════════════════════════════════════════════════════════════════════════════
-# FIGURE 2 — Relative Bias Heatmap (mda-style, MAR, pooled across conditions)
+# FIGURE 1a / 1b — Frobenius Distance Overview (MAR, MNAR)
 # ══════════════════════════════════════════════════════════════════════════════
-cat("Figure 2: Relative Bias Heatmap (MAR, pooled)\n")
+cat("\nFigure 1a: Frobenius Distance Overview — MAR\n")
+fig1a <- agg %>% filter(mech == "MAR")
+p1a <- make_overview(fig1a, "f_dist_mean",
+                     "Frobenius Distance to True Covariance",
+                     "Covariance Recovery \u2014 MAR")
+ggsave("figs/fig1a_frobenius_overview_mar.pdf",
+       p1a, width = 30, height = 20, units = "cm")
+
+cat("Figure 1b: Frobenius Distance Overview — MNAR\n")
+fig1b <- agg %>% filter(mech == "MNAR")
+p1b <- make_overview(fig1b, "f_dist_mean",
+                     "Frobenius Distance to True Covariance",
+                     "Covariance Recovery \u2014 MNAR")
+ggsave("figs/fig1b_frobenius_overview_mnar.pdf",
+       p1b, width = 30, height = 20, units = "cm")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FIGURE 1c / 1d — Frobenius Distance Per-Distribution (MAR, MNAR)
+# ══════════════════════════════════════════════════════════════════════════════
+cat("\nFigure 1c: Frobenius Distance Per-Distribution — MAR\n")
+for (d in dist_labels) {
+  fig <- agg %>% filter(mech == "MAR", dist == d)
+  p <- make_perdist(fig, "f_dist_mean",
+                    "Frobenius Distance to True Covariance",
+                    paste0("Covariance Recovery \u2014 MAR \u2014 ", d))
+  safe <- gsub("[ ()%]+", "_", d)
+  ggsave(sprintf("figs/fig1c_frobenius_mar_%s.pdf", safe),
+         p, width = 24, height = 14, units = "cm")
+}
+
+cat("Figure 1d: Frobenius Distance Per-Distribution — MNAR\n")
+for (d in dist_labels) {
+  fig <- agg %>% filter(mech == "MNAR", dist == d)
+  p <- make_perdist(fig, "f_dist_mean",
+                    "Frobenius Distance to True Covariance",
+                    paste0("Covariance Recovery \u2014 MNAR \u2014 ", d))
+  safe <- gsub("[ ()%]+", "_", d)
+  ggsave(sprintf("figs/fig1d_frobenius_mnar_%s.pdf", safe),
+         p, width = 24, height = 14, units = "cm")
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FIGURE 2a / 2b — Slope Variance Bias Overview (MAR, MNAR)
+# ══════════════════════════════════════════════════════════════════════════════
+cat("\nFigure 2a: Slope Variance Bias Overview — MAR\n")
+fig2a <- agg %>% filter(mech == "MAR")
+p2a <- make_overview(fig2a, "s_var_bias_mean",
+                     "Slope Variance Relative Bias (%)",
+                     "Parameter Recovery \u2014 MAR") +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             color = "grey50", linewidth = 0.4)
+ggsave("figs/fig2a_slope_bias_overview_mar.pdf",
+       p2a, width = 30, height = 20, units = "cm")
+
+cat("Figure 2b: Slope Variance Bias Overview — MNAR\n")
+fig2b <- agg %>% filter(mech == "MNAR")
+p2b <- make_overview(fig2b, "s_var_bias_mean",
+                     "Slope Variance Relative Bias (%)",
+                     "Parameter Recovery \u2014 MNAR") +
+  geom_hline(yintercept = 0, linetype = "dashed",
+             color = "grey50", linewidth = 0.4)
+ggsave("figs/fig2b_slope_bias_overview_mnar.pdf",
+       p2b, width = 30, height = 20, units = "cm")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FIGURE 2c / 2d — Slope Variance Bias Per-Distribution (MAR, MNAR)
+# ══════════════════════════════════════════════════════════════════════════════
+cat("\nFigure 2c: Slope Variance Bias Per-Distribution — MAR\n")
+for (d in dist_labels) {
+  fig <- agg %>% filter(mech == "MAR", dist == d)
+  p <- make_perdist(fig, "s_var_bias_mean",
+                    "Slope Variance Relative Bias (%)",
+                    paste0("Parameter Recovery \u2014 MAR \u2014 ", d)) +
+    geom_hline(yintercept = 0, linetype = "dashed",
+               color = "grey50", linewidth = 0.4)
+  safe <- gsub("[ ()%]+", "_", d)
+  ggsave(sprintf("figs/fig2c_slope_bias_mar_%s.pdf", safe),
+         p, width = 24, height = 14, units = "cm")
+}
+
+cat("Figure 2d: Slope Variance Bias Per-Distribution — MNAR\n")
+for (d in dist_labels) {
+  fig <- agg %>% filter(mech == "MNAR", dist == d)
+  p <- make_perdist(fig, "s_var_bias_mean",
+                    "Slope Variance Relative Bias (%)",
+                    paste0("Parameter Recovery \u2014 MNAR \u2014 ", d)) +
+    geom_hline(yintercept = 0, linetype = "dashed",
+               color = "grey50", linewidth = 0.4)
+  safe <- gsub("[ ()%]+", "_", d)
+  ggsave(sprintf("figs/fig2d_slope_bias_mnar_%s.pdf", safe),
+         p, width = 24, height = 14, units = "cm")
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FIGURE 3 — Relative Bias Heatmap (gradient2 tile, MAR pooled)
+# ══════════════════════════════════════════════════════════════════════════════
+cat("\nFigure 3: Relative Bias Heatmap (MAR, pooled)\n")
 
 heatmap_data <- all_params %>%
   filter(mech == "MAR") %>%
@@ -153,7 +293,7 @@ heatmap_data <- all_params %>%
                          labels = param_labels_tex)
   )
 
-p2 <- ggplot(heatmap_data,
+p3 <- ggplot(heatmap_data,
        aes(x = param_label, y = method, fill = RelBias)) +
   geom_tile(color = "white", linewidth = 0.5) +
   facet_wrap(~ dist, nrow = 1) +
@@ -161,7 +301,7 @@ p2 <- ggplot(heatmap_data,
                        midpoint = 0, name = "Rel Bias (%)") +
   scale_x_discrete(labels = scales::parse_format()) +
   labs(title = "Relative Bias of GCM Parameters by Method and Distribution",
-       subtitle = "MAR, pooled across sample sizes and missingness rates",
+       subtitle = "MAR \u2014 pooled across sample sizes and missingness rates",
        x = "Parameter", y = "Method") +
   theme_minimal(base_size = 11) +
   theme(
@@ -171,17 +311,15 @@ p2 <- ggplot(heatmap_data,
     legend.position = "right"
   )
 
-ggsave("manuscript_figures/fig2_relbias_heatmap.pdf",
-       plot = p2, width = 32, height = 14, units = "cm")
-ggsave("manuscript_figures/fig2_relbias_heatmap.png",
-       plot = p2, width = 32, height = 14, units = "cm", dpi = 300)
+ggsave("figs/fig3_relbias_heatmap.pdf",
+       p3, width = 32, height = 14, units = "cm")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# FIGURE 3 — Outlier Degradation (Δ Frobenius: Normal -> Outlier, MAR)
+# FIGURE 4 — Outlier Degradation (Δ Frobenius Normal → Outlier, MAR)
 # ══════════════════════════════════════════════════════════════════════════════
-cat("Figure 3: Outlier Degradation (MAR)\n")
+cat("\nFigure 4: Outlier Degradation (MAR)\n")
 
-fig3 <- agg %>%
+fig4 <- agg %>%
   filter(mech == "MAR", dist %in% c("Normal", "5% Outliers")) %>%
   select(N, miss, dist, method, f_dist_mean) %>%
   pivot_wider(names_from = dist, values_from = f_dist_mean) %>%
@@ -193,9 +331,9 @@ fig3 <- agg %>%
     Delta_sd   = sd(Delta, na.rm = TRUE),
     .groups    = "drop"
   ) %>%
-  mutate(miss_pct = factor(paste0(miss * 100, "%"), levels = miss_levels))
+  mutate(miss_pct = factor(paste0(miss * 100, "%"), levels = miss_labels))
 
-p3 <- ggplot(fig3, aes(x = method, y = Delta_mean, fill = method)) +
+p4 <- ggplot(fig4, aes(x = method, y = Delta_mean, fill = method)) +
   geom_col(width = 0.7) +
   geom_errorbar(aes(ymin = Delta_mean - Delta_sd, ymax = Delta_mean + Delta_sd),
                 width = 0.2, linewidth = 0.4) +
@@ -211,74 +349,7 @@ p3 <- ggplot(fig3, aes(x = method, y = Delta_mean, fill = method)) +
     legend.position    = "none"
   )
 
-ggsave("manuscript_figures/fig3_outlier_degradation.pdf",
-       plot = p3, width = 27, height = 10, units = "cm")
-ggsave("manuscript_figures/fig3_outlier_degradation.png",
-       plot = p3, width = 27, height = 10, units = "cm", dpi = 300)
+ggsave("figs/fig4_outlier_degradation.pdf",
+       p4, width = 27, height = 10, units = "cm")
 
-# ══════════════════════════════════════════════════════════════════════════════
-# FIGURE 4 — MSE Bar Chart (mda-style, MAR, pooled, faceted by parameter)
-# ══════════════════════════════════════════════════════════════════════════════
-cat("Figure 4: MSE Bar Chart by Parameter and Distribution (MAR)\n")
-
-mse_data <- all_params %>%
-  filter(mech == "MAR") %>%
-  group_by(dist, method, param) %>%
-  summarise(
-    bias_raw = mean(est, na.rm = TRUE) - beta_true[param[1]],
-    ESE      = sd(est, na.rm = TRUE),
-    MSE      = bias_raw^2 + ESE^2,
-    .groups  = "drop"
-  ) %>%
-  mutate(
-    param_label = factor(param, levels = param_names,
-                         labels = param_labels_tex)
-  )
-
-p4 <- ggplot(mse_data, aes(x = method, y = MSE, fill = method)) +
-  geom_col() +
-  scale_fill_manual(values = method_colors, guide = "none") +
-  facet_grid(param_label ~ dist, scales = "free_y",
-             labeller = labeller(param_label = label_parsed)) +
-  labs(title = "MSE of GCM Parameters by Method and Distribution",
-       subtitle = "MAR, pooled across sample sizes and missingness rates",
-       x = "", y = "MSE") +
-  theme_minimal(base_size = 10) +
-  theme(
-    axis.text.x    = element_text(angle = 45, hjust = 1),
-    strip.text.y   = element_text(size = 9),
-    panel.grid.minor = element_blank()
-  )
-
-ggsave("manuscript_figures/fig4_mse_bars.pdf",
-       plot = p4, width = 28, height = 20, units = "cm")
-ggsave("manuscript_figures/fig4_mse_bars.png",
-       plot = p4, width = 28, height = 20, units = "cm", dpi = 300)
-
-# ══════════════════════════════════════════════════════════════════════════════
-# FIGURE 5 — Slope Variance Bias by Missingness Rate (MAR + MNAR)
-# ══════════════════════════════════════════════════════════════════════════════
-cat("Figure 5: Slope Variance Bias by Missingness (MAR & MNAR)\n")
-
-fig5 <- agg %>% filter(mech %in% c("MAR", "MNAR"))
-
-p5 <- ggplot(fig5, aes(x = miss, y = s_var_bias_mean, group = method)) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50", linewidth = 0.4) +
-  geom_line(aes(linetype = method, color = method), linewidth = 0.6) +
-  geom_point(aes(color = method), size = 1.5) +
-  scale_x_continuous(
-    breaks = c(0.05, 0.10, 0.15, 0.30),
-    labels = c("5%", "10%", "15%", "30%")
-  ) +
-  scale_method_aes +
-  facet_grid(dist ~ mech + N_label) +
-  labs(x = "Missingness Rate",
-       y = "Slope Variance Relative Bias (%)") +
-  theme_smriti()
-
-ggsave("manuscript_figures/fig5_slope_bias.pdf",
-       plot = p5, width = 52, height = 18, units = "cm")
-ggsave("manuscript_figures/fig5_slope_bias.png",
-       plot = p5, width = 52, height = 18, units = "cm", dpi = 300)
-
-cat("\nAll figures saved to manuscript_figures/\n")
+cat("\nAll figures saved to figs/\n")

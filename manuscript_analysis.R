@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# Manuscript-Level Performance Analysis for smriti
+# Manuscript-Level Performance Analysis for lagrange
 # Style adapted from mda/analysis.R — parameter-level breakdown, MSE, heatmaps
 # Uses prod_results.rds (post-HPC) and tune_results.rds
 # ══════════════════════════════════════════════════════════════════════════════

@@ -2,7 +2,7 @@
 .libPaths(c("~/R/rivanna-lib", .libPaths()))
 
 library(MASS)
-library(smriti)
+library(lagrange)
 library(parallel)
 library(lavaan)
 library(mice)
@@ -341,12 +341,12 @@ run_iteration <- function(sim_id, params) {
                             psi_LS = gp["psi_LS"])
 
   # ── Smriti: default (Pearson target, λ = 1.0) ────────────────────────────
-  # NOTE: smriti reuses missForest's output as initial_imputation so the
+  # NOTE: lagrange reuses missForest's output as initial_imputation so the
   # Lagrangian routing benefit is measured in isolation.  time_sec captures
   # only the routing step; pipeline_time includes the full end-to-end cost
-  # (missForest initialisation + smriti routing).
+  # (missForest initialisation + lagrange routing).
   time_sd <- system.time({
-    imp_sd <- tryCatch(smriti_impute(df_miss, time_cols = 1:t_points,
+    imp_sd <- tryCatch(lagrange_impute(df_miss, time_cols = 1:t_points,
                        initial_imputation = imp_mf, lambda = 1.0, robust = FALSE),
                        error = function(e) NULL)
     s_var_sd <- NA; s_se_sd <- NA; d_sd <- NA
@@ -368,7 +368,7 @@ run_iteration <- function(sim_id, params) {
 
   # ── Smriti: robust (Spearman + MAD target, λ = 1.0) ──────────────────────
   time_sr <- system.time({
-    imp_sr <- tryCatch(smriti_impute(df_miss, time_cols = 1:t_points,
+    imp_sr <- tryCatch(lagrange_impute(df_miss, time_cols = 1:t_points,
                        initial_imputation = imp_mf, lambda = 1.0, robust = TRUE),
                        error = function(e) NULL)
     s_var_sr <- NA; s_se_sr <- NA; d_sr <- NA
@@ -389,13 +389,13 @@ run_iteration <- function(sim_id, params) {
                             pipeline_time = unname(time_mf) + unname(time_sr))
 
   # ── Smriti: FIML model-implied Σ target (MAR-consistent) ─────────────────
-  # Uses smriti_fiml() which fits a lavaan growth model with FIML to extract
+  # Uses lagrange_fiml() which fits a lavaan growth model with FIML to extract
   # the model-implied covariance as the structural target, then projects the
   # missForest initial imputation toward it.  This is the correct Smriti
   # variant for MAR data — pairwise-deletion targets (Default / Robust)
   # are biased toward survivors and should not be used under MAR dropout.
   time_sf <- system.time({
-    imp_sf <- tryCatch(smriti_fiml(df_miss, model = gcm_mod,
+    imp_sf <- tryCatch(lagrange_fiml(df_miss, model = gcm_mod,
                        initial_imputation = imp_mf, lambda = 1.0),
                        error = function(e) NULL)
     s_var_sf <- NA; s_se_sf <- NA; d_sf <- NA

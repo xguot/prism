@@ -1,69 +1,85 @@
 ---
-title: "Introduction to smriti: Structural Variance Preservation"
+title: "lagrange: FIML Covariance Projection for Longitudinal Missing Data"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Introduction to smriti}
+  %\VignetteIndexEntry{lagrange: FIML Covariance Projection}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
-## The Imputation Uncertainty Principle
-Modern machine learning imputation algorithms (like `missForest`) excel at
-minimizing point-wise prediction error (RMSE). However, this point-wise
-optimization inherently shrinks the variance of the imputed values, causing
-**structural variance collapse**. In longitudinal Growth Curve Models (GCM),
-this crushes the latent slope variance ($\sigma^2_S$), destroying the
-statistical power needed to track patient trajectories over time.
-
-The `smriti` package resolves this by decoupling prediction from structural
-geometry. It utilizes a two-stage architecture:
-1. **Initialization:** Non-parametric imputation bridges the missingness to
-   establish a dense matrix.
-2. **Lagrangian Projection:** A C++ gradient descent layer projects the
-   hallucinated data toward a target covariance manifold while preserving
-   fidelity to the initial imputed values. The augmented loss function is
-
-   $$L(X) = \frac{1}{2}\|X - X_{\text{imp}}\|_F^2
-            + \frac{\lambda}{2}\|\operatorname{cov}(X) - \Sigma_{\text{target}}\|_F^2$$
-
-   where the first term anchors the solution near the initial imputation
-   and the second (governed by $\lambda$) enforces the covariance structure.
-
-## The Robustness-Efficiency Tradeoff
-Real-world clinical data often contains heavy-tailed skew or corrupted sensor
-artifacts. The `smriti_impute()` function handles this via the `robust`
-routing toggle:
-
-*   `robust = FALSE`: Uses pairwise-complete Pearson covariance, projected to
-    the nearest positive-semidefinite matrix to correct any non-PSD artefacts
-    from pairwise deletion. Best for well-behaved, approximately-Normal data.
-*   `robust = TRUE`: Constructs the target from pairwise Spearman correlations
-    (rank-based, outlier-resistant) and column-wise MAD scale estimates.
-    The resulting matrix is projected to the nearest PSD manifold, producing a
-    target that is structurally robust to severe outliers (e.g., broken EHR
-    sensors).
-
-## Fidelity-Constraint Balance
-The penalty weight `lambda` controls the trade-off between preserving the
-original imputation values and matching the target covariance. At `lambda = 1.0`
-(the default) both objectives are weighted equally. Increasing `lambda`
-enforces the covariance constraint more strictly but allows greater deviation
-from the initial imputation. The `learning_rate` (default `0.001`) governs
-gradient step size; `max_iter` (default `2000`) bounds the optimisation.
-
-## Example: Shielding Against Corrupted EHR Data
-```{r, eval=FALSE}
-library(smriti)
-library(missForest)
-
-# Load clinical data with structural missingness and sensor artifacts
-data <- read.csv("clinical_proxy.csv")
-
-# Execute robust refinement to isolate the structural manifold
-clean_data <- smriti_impute(
-  data       = data,
-  time_cols  = c("T1", "T2", "T3", "T4"),
-  robust     = TRUE,
-  lambda     = 1.0
-)
+```{r, echo = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
+
+## The Problem
+
+Full Information Maximum Likelihood (FIML) is the gold standard for estimating
+structural equation models under missing-at-random (MAR) data. It uses all
+available observations without discarding partial cases and produces consistent
+parameter estimates.
+
+However, FIML does not produce a completed dataset. The naive approach —
+computing conditional expectations via `lavPredict(type = "ov")` — attenuates
+the variance by 40–60%. This variance collapse destroys the statistical
+properties that FIML estimation preserves.
+
+The `lagrange` package bridges this gap: it produces a single completed dataset
+whose covariance structure matches the FIML model-implied covariance matrix,
+without variance attenuation.
+
+## How It Works
+
+The pipeline has two steps:
+
+1. **FIML Estimation:** Fit a latent growth model via `lavaan::growth()` with
+   `missing = "fiml"`. Extract the model-implied covariance matrix Σ_FIML.
+
+2. **Lagrangian Projection:** Starting from an initial imputation (user-supplied
+   or column-mean fallback), run C++ gradient descent to minimize:
+
+   $$L(X) = \|\operatorname{cov}(X) - \Sigma_{\text{FIML}}\|_F^2$$
+
+   Only originally-missing cells are updated. The gradient is computed
+   analytically and masked so observed data stays frozen.
+
+## Basic Usage
+
+```{r, eval = FALSE}
+library(lagrange)
+library(lavaan)
+
+# Define a latent growth model
+model <- "
+  i =~ 1*T1 + 1*T2 + 1*T3 + 1*T4
+  s =~ 0*T1 + 1*T2 + 2*T3 + 3*T4
+"
+
+df <- data.frame(
+  T1 = c(1.2, NA, 2.8, 3.1, 4.0),
+  T2 = c(2.1, 2.5, NA, 4.0, 4.5),
+  T3 = c(3.0, 3.3, 4.1, NA, 5.1),
+  T4 = c(NA, 4.1, 5.0, 6.0, 6.2)
+)
+
+# Impute with covariance projection
+result <- lagrange_fiml(df, model)
+print(result)
+```
+
+## Providing an Initial Imputation
+
+For better starting values, supply an initial imputation from any method:
+
+```{r, eval = FALSE}
+library(missRanger)
+initial <- missRanger::missRanger(df, pmm.k = 5, num.trees = 100)
+result <- lagrange_fiml(df, model, initial_imputation = initial)
+```
+
+## Tuning Parameters
+
+- `lambda` (default 1.0): Penalty weight on the covariance constraint. Higher
+  values enforce the target structure more aggressively.
+- `learning_rate` (default 0.001): Gradient descent step size.
+- `tol` (default 1e-6): Convergence tolerance on the Frobenius distance.
+- `max_iter` (default 2000): Maximum gradient descent iterations.

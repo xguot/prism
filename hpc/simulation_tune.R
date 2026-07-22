@@ -2,7 +2,7 @@
 .libPaths(c("~/R/rivanna-lib", .libPaths()))
 
 library(MASS)
-library(smriti)
+library(lagrange)
 library(parallel)
 library(lavaan)
 library(missForest)
@@ -39,7 +39,7 @@ num_cores <- if (tune_mode == "coarse") {
 
 # ── Tuning Grid ──────────────────────────────────────────────────────────────
 # FIML is the sole baseline — MICE, missForest, missRanger are excluded.
-# The smriti Lagrangian step is ~0.02s per variant, so sweeping 5 lambda ×
+# The lagrange Lagrangian step is ~0.02s per variant, so sweeping 5 lambda ×
 # 2 robust combinations adds only ~15% overhead over a single config.
 # grid_n, grid_lambda, n_sims, and grid_dist are set by the speed toggle above.
 grid_miss   <- c(0.05, 0.15, 0.30)
@@ -190,7 +190,7 @@ run_iteration <- function(sim_id, params) {
     time_sec = unname(time_fiml)
   )
 
-  # ── Initial Imputation (shared across smriti variants) ──────────────────
+  # ── Initial Imputation (shared across lagrange variants) ──────────────────
   imp_mf <- tryCatch(
     missForest::missForest(df_miss, verbose = FALSE)$ximp,
     error = function(e) NULL
@@ -212,7 +212,7 @@ run_iteration <- function(sim_id, params) {
       tag <- sprintf("Smriti_l%.2f_%s", lam, if (rb) "R" else "S")
       time_sm <- system.time({
         imp_sm <- tryCatch(
-          smriti_impute(df_miss, time_cols = 1:t_points,
+          lagrange_impute(df_miss, time_cols = 1:t_points,
                         initial_imputation = imp_mf,
                         lambda = lam, robust = rb),
           error = function(e) NULL
@@ -256,7 +256,7 @@ run_iteration <- function(sim_id, params) {
   tag_sf <- "Smriti_FIML"
   time_sf <- system.time({
     imp_sf <- tryCatch(
-      smriti_fiml(df_miss, model = gcm_mod,
+      lagrange_fiml(df_miss, model = gcm_mod,
                   initial_imputation = imp_mf, lambda = 1.0),
       error = function(e) NULL
     )
@@ -297,11 +297,11 @@ conditions <- expand.grid(
   n = grid_n, miss = grid_miss, dist = grid_dist, mech = grid_mech,
   stringsAsFactors = FALSE
 )
-# Each condition carries the full hyperparameter grid for smriti
+# Each condition carries the full hyperparameter grid for lagrange
 conditions$lambdas <- list(grid_lambda)
 conditions$robusts <- list(grid_robust)
 total_conditions <- nrow(conditions)
-n_variants <- 2 + length(grid_lambda) * length(grid_robust)  # FIML + Smriti_FIML + smriti combos
+n_variants <- 2 + length(grid_lambda) * length(grid_robust)  # FIML + Smriti_FIML + lagrange combos
 
 # ── SLURM Array Dispatch ─────────────────────────────────────────────────────
 # When running under a SLURM job array, each task processes exactly one

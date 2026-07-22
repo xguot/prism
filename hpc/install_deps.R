@@ -1,4 +1,4 @@
-# Install dependencies for smriti
+# Install dependencies for lagrange
 lib_path <- "~/R/rivanna-lib"
 dir.create(lib_path, recursive = TRUE, showWarnings = FALSE)
 .libPaths(c(lib_path, .libPaths()))
