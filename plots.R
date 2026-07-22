@@ -51,7 +51,7 @@ theme_mda <- function(legend_pos = "bottom") {
 # ══════════════════════════════════════════════════════════════════════════════
 method_levels <- c(
   "FIML_Predict", "MICE", "missForest", "missRanger",
-  "prism_fiml"
+  "prism_fiml", "prism_mi"
 )
 
 method_colors <- c(
@@ -59,7 +59,8 @@ method_colors <- c(
   "MICE"           = "#4DAF4A",   # green — multiple imputation
   "missForest"     = "#984EA3",   # purple — ML single imputation
   "missRanger"     = "#FF7F00",   # orange — fast ML baseline
-  "prism_fiml"  = "#E41A1C"    # red — primary proposed method
+  "prism_fiml"     = "#E41A1C",   # red — primary proposed method
+  "prism_mi"       = "#B30000"    # dark red — proper MI proposed method
 )
 
 # Solid for proposed methods, dashed/dotted for baselines
@@ -68,7 +69,8 @@ method_linetypes <- c(
   "MICE"           = "dotdash",
   "missForest"     = "longdash",
   "missRanger"     = "dotted",
-  "prism_fiml"  = "solid"
+  "prism_fiml"     = "solid",
+  "prism_mi"       = "solid"
 )
 
 scale_method_aes <- list(

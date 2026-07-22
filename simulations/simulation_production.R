@@ -365,7 +365,50 @@ run_iteration <- function(sim_id, params) {
                             psi_LS = gp["psi_LS"],
                             pipeline_time = unname(time_mf) + unname(time_sf))
 
-  rm(df_true, df_miss, imp_mice, imp_mf, imp_mr, imp_sf, imp_fp)
+  # ── prism_mi: Proper Multiple Imputation ────────────────────────────────────
+  time_smi <- system.time({
+    m_prism <- 20
+    imp_smi_list <- tryCatch({
+      fit_fiml_base <- growth(gcm_mod, data = df_miss, missing = "fiml")
+      prism_mi(df_miss, fit_fiml_base, m = m_prism, initial_imputation = imp_mf, lambda = 1.0)
+    }, error = function(e) NULL)
+
+    s_var_smi <- NA; s_se_smi <- NA; d_smi <- NA
+    gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
+
+    if (!is.null(imp_smi_list) && length(imp_smi_list) == m_prism) {
+      cov_list <- lapply(imp_smi_list, function(x) stats::cov(x[, 1:t_points]))
+      avg_cov <- Reduce("+", cov_list) / length(cov_list)
+      d_smi <- frob_dist(avg_cov, true_cov)
+
+      fit_results <- lapply(imp_smi_list, function(ds) {
+        fit <- tryCatch(lavaan::growth(gcm_mod, data = ds), error = function(e) NULL)
+        if (is.null(fit)) return(NULL)
+        list(est = extract_gcm_params(fit, "est"), se = extract_gcm_params(fit, "se"))
+      })
+
+      valid_fits <- fit_results[!sapply(fit_results, is.null)]
+      if (length(valid_fits) > 0) {
+        p_names <- names(valid_fits[[1]]$est)
+        pooled <- sapply(p_names, function(pn) {
+          ests <- sapply(valid_fits, function(f) f$est[pn])
+          ses  <- sapply(valid_fits, function(f) f$se[pn])
+          pool_rubin(ests, ses)
+        })
+        gp <- pooled["est", ]
+        gps <- pooled["se", ]
+        s_var_smi <- gp["psi_S"]; s_se_smi <- gps["psi_S"]
+      }
+    }
+  })["elapsed"]
+  res_list[[7]] <- make_row("prism_mi", d_smi, s_var_smi, s_se_smi,
+                            unname(time_smi),
+                            beta_L = gp["beta_L"], beta_S = gp["beta_S"],
+                            psi_L = gp["psi_L"], psi_S = gp["psi_S"],
+                            psi_LS = gp["psi_LS"],
+                            pipeline_time = unname(time_mf) + unname(time_smi))
+
+  rm(df_true, df_miss, imp_mice, imp_mf, imp_mr, imp_sf, imp_fp, imp_smi_list)
   do.call(rbind, res_list)
 }
 
@@ -384,8 +427,8 @@ if (!is.na(array_id) && array_id >= 1 && array_id <= total_conditions) {
 }
 
 # ── Execution ────────────────────────────────────────────────────────────────
-cat(sprintf("Grid: %d conditions × %d reps × 6 methods = %d total rows\n",
-            total_conditions, n_sims, total_conditions * n_sims * 6))
+cat(sprintf("Grid: %d conditions × %d reps × 7 methods = %d total rows\n",
+            total_conditions, n_sims, total_conditions * n_sims * 7))
 cat(sprintf("Parallel cores: %d\n", num_cores))
 cat(sprintf("Output: %s\n\n", output_file))
 
