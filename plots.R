@@ -1,5 +1,5 @@
 #!/usr/bin/env Rscript
-# lagrange manuscript figures — exact mda plotting style.
+# prism manuscript figures — exact mda plotting style.
 #
 # Theme, color, line-type, facet, and sizing conventions are taken verbatim
 # from appendix_plots_from_tex.R and plot_results.R.  Every figure uses the
@@ -47,11 +47,11 @@ theme_mda <- function(legend_pos = "bottom") {
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Shared scales — mda color palette for baselines, red for lagrange
+# Shared scales — mda color palette for baselines, red for prism
 # ══════════════════════════════════════════════════════════════════════════════
 method_levels <- c(
   "FIML_Predict", "MICE", "missForest", "missRanger",
-  "lagrange_fiml"
+  "prism_fiml"
 )
 
 method_colors <- c(
@@ -59,7 +59,7 @@ method_colors <- c(
   "MICE"           = "#4DAF4A",   # green — multiple imputation
   "missForest"     = "#984EA3",   # purple — ML single imputation
   "missRanger"     = "#FF7F00",   # orange — fast ML baseline
-  "lagrange_fiml"  = "#E41A1C"    # red — primary proposed method
+  "prism_fiml"  = "#E41A1C"    # red — primary proposed method
 )
 
 # Solid for proposed methods, dashed/dotted for baselines
@@ -68,7 +68,7 @@ method_linetypes <- c(
   "MICE"           = "dotdash",
   "missForest"     = "longdash",
   "missRanger"     = "dotted",
-  "lagrange_fiml"  = "solid"
+  "prism_fiml"  = "solid"
 )
 
 scale_method_aes <- list(

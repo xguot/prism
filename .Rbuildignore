@@ -3,8 +3,8 @@
 ^hpc$
 ^tests/simulation_results\.rds$
 ^\.Rcheck/
-^smriti\.Rcheck/
-^smriti/
+^prism\.Rcheck/
+^prism/
 ^.*\.so$
 ^src/.*\.o$
 ^src/.*\.so$

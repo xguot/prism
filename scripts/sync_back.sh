@@ -1,11 +1,11 @@
 #!/bin/bash
 # rsync simulation results back from Rivanna
-# Usage: bash tmp/sync_back.sh
+# Usage: bash scripts/sync_back.sh
 
 set -euo pipefail
 
 REMOTE="rivanna"
-SRC="~/scratch/smriti"
+SRC="~/scratch/prism"
 
 echo "=== rsync results ← Rivanna ==="
 echo "  Remote : ${REMOTE}:${SRC}"

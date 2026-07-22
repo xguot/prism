@@ -1,21 +1,21 @@
-# lagrange
+# prism
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**lagrange** is an R package that produces a completed longitudinal dataset whose covariance structure matches the model-implied covariance from a FIML-estimated latent growth model. It fits the model via `lavaan`, extracts the structural target, and projects an initial imputation onto that manifold using a C++ Lagrangian-constrained gradient descent engine.
+**prism** is an R package that produces a completed longitudinal dataset whose covariance structure matches the model-implied covariance from a FIML-estimated latent growth model. It fits the model via `lavaan`, extracts the structural target, and projects an initial imputation onto that manifold using a C++ Lagrangian-constrained gradient descent engine.
 
 ## Installation
 
 ```R
 # Development version
 # install.packages("devtools")
-devtools::install_github("xguot/lagrange")
+devtools::install_github("xguot/prism")
 ```
 
 ## Usage
 
 ```R
-library(lagrange)
+library(prism)
 library(lavaan)
 
 # Define a latent growth model
@@ -25,7 +25,7 @@ model <- "
 "
 
 # Impute missing values while preserving the FIML-implied structure
-imputed_data <- lagrange_fiml(
+imputed_data <- prism_fiml(
   data   = clinical_df,
   model  = model,
   lambda = 0.5
@@ -45,12 +45,12 @@ $$L(X) = \|\operatorname{cov}(X) - \Sigma_{\text{FIML}}\|_F^2$$
 
 subject to observed cells frozen in place.
 
-## Why lagrange
+## Why prism
 
-FIML estimates parameters correctly under MAR but does not fill in missing values. `lavPredict(type="ov")` (conditional expectations) attenuates variance by 40–60%. lagrange produces a completed dataset whose structural parameters match the FIML model without variance attenuation — enabling downstream analyses that require complete data.
+FIML estimates parameters correctly under MAR but does not fill in missing values. `lavPredict(type="ov")` (conditional expectations) attenuates variance by 40–60%. prism produces a completed dataset whose structural parameters match the FIML model without variance attenuation — enabling downstream analyses that require complete data.
 
 ## Citation
 
-If you use **lagrange** in your research, please cite:
+If you use **prism** in your research, please cite:
 
-> Guo, X. (2026). lagrange: FIML Covariance Projection for Longitudinal Missing Data. R package version 0.2.0.
+> Guo, X. (2026). prism: FIML Covariance Projection for Longitudinal Missing Data. R package version 0.2.0.

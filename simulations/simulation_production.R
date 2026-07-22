@@ -2,7 +2,7 @@
 .libPaths(c("~/R/rivanna-lib", .libPaths()))
 
 library(MASS)
-library(lagrange)
+library(prism)
 library(parallel)
 library(lavaan)
 library(mice)
@@ -235,7 +235,7 @@ run_iteration <- function(sim_id, params) {
   # the "obvious" way to get completed data from a FIML model — but the
   # conditional expectations are shrunk toward the mean, attenuating variance.
   # Included here as a baseline to demonstrate that the naive FIML-completed
-  # dataset fails at the covariance level, motivating the lagrange projection.
+  # dataset fails at the covariance level, motivating the prism projection.
   time_fp <- system.time({
     s_var_fp <- NA; s_se_fp <- NA; d_fp <- NA
     gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
@@ -340,12 +340,12 @@ run_iteration <- function(sim_id, params) {
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"])
 
-  # ── lagrange_fiml: FIML model-implied Σ target ───────────────────────────
-  # Uses lagrange_fiml() which fits a lavaan growth model with FIML to extract
+  # ── prism_fiml: FIML model-implied Σ target ───────────────────────────
+  # Uses prism_fiml() which fits a lavaan growth model with FIML to extract
   # the model-implied covariance as the structural target, then projects the
   # missForest initial imputation toward it.
   time_sf <- system.time({
-    imp_sf <- tryCatch(lagrange_fiml(df_miss, model = gcm_mod,
+    imp_sf <- tryCatch(prism_fiml(df_miss, model = gcm_mod,
                        initial_imputation = imp_mf, lambda = 1.0),
                        error = function(e) NULL)
     s_var_sf <- NA; s_se_sf <- NA; d_sf <- NA
@@ -358,7 +358,7 @@ run_iteration <- function(sim_id, params) {
       if (!is.null(fit_sf)) gp <- extract_gcm_params(fit_sf)
     }
   })["elapsed"]
-  res_list[[6]] <- make_row("lagrange_fiml", d_sf, s_var_sf, s_se_sf,
+  res_list[[6]] <- make_row("prism_fiml", d_sf, s_var_sf, s_se_sf,
                             unname(time_sf),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],

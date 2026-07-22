@@ -39,7 +39,7 @@ To solve this, we define the Lagrangian:
 \begin{equation}
     \mathcal{L}(\bm{X}, \bm{\Lambda}) = \frac{1}{2} \big\| \bm{\Sigma}(\bm{X}) - \bm{\Sigma}^* \big\|_F^2 + \text{Tr}\Big( \bm{\Lambda}^T \big( \bm{X} \odot (\bm{1} - \bm{M}) - \bm{X}^{(0)} \odot (\bm{1} - \bm{M}) \big) \Big)
 \end{equation}
-where $\bm{\Lambda} \in \mathbb{R}^{n \times p}$ is the matrix of Lagrange multipliers. The Karush-Kuhn-Tucker (KKT) stationarity condition requires that the gradient of the Lagrangian with respect to $\bm{X}$ is zero at the optimum:
+where $\bm{\Lambda} \in \mathbb{R}^{n \times p}$ is the matrix of Prism multipliers. The Karush-Kuhn-Tucker (KKT) stationarity condition requires that the gradient of the Lagrangian with respect to $\bm{X}$ is zero at the optimum:
 \begin{equation}
     \nabla_{\bm{X}} \mathcal{L}(\bm{X}, \bm{\Lambda}) = \nabla_{\bm{X}} f(\bm{X}) + \bm{\Lambda} \odot (\bm{1} - \bm{M}) = \mathbf{0}
 \end{equation}
@@ -104,7 +104,7 @@ Algorithm \ref{alg:projection} outlines the projected gradient descent procedure
 \end{algorithmic}
 \end{algorithm}
 
-\section{The FIML-Smriti Pipeline}
+\section{The FIML-Prism Pipeline}
 
 \textbf{Step 1.} Non-parametric imputation (e.g., Random Forest) produces an initial complete dataset $\bm{X}^{(0)}$ with high point-level accuracy.
 
@@ -115,9 +115,9 @@ Algorithm \ref{alg:projection} outlines the projected gradient descent procedure
 \textbf{Target variants.} The engine accepts any $\bm{\Sigma}^*$. Three instantiations are evaluated:
 
 \begin{itemize}
-    \item \textbf{Smriti\_Default.} $\bm{\Sigma}^*$ estimated via pairwise Pearson covariance. Fast, but biased under MAR dropout (conditioning on survivors).
-    \item \textbf{Smriti\_Robust.} $\bm{\Sigma}^*$ estimated via pairwise Spearman correlation scaled by column-wise MAD, projected to the PSD cone. Resistant to outlier contamination but still suffers from pairwise deletion bias under MAR.
-    \item \textbf{Smriti\_FIML.} $\bm{\Sigma}^*$ is the FIML model-implied covariance from a lavaan structural model. MAR-consistent.
+    \item \textbf{Prism\_Default.} $\bm{\Sigma}^*$ estimated via pairwise Pearson covariance. Fast, but biased under MAR dropout (conditioning on survivors).
+    \item \textbf{Prism\_Robust.} $\bm{\Sigma}^*$ estimated via pairwise Spearman correlation scaled by column-wise MAD, projected to the PSD cone. Resistant to outlier contamination but still suffers from pairwise deletion bias under MAR.
+    \item \textbf{Prism\_FIML.} $\bm{\Sigma}^*$ is the FIML model-implied covariance from a lavaan structural model. MAR-consistent.
 \end{itemize}
 
 All three use the identical projection engine (Algorithm~\ref{alg:projection}); they differ only in the source of $\bm{\Sigma}^*$.
@@ -133,9 +133,9 @@ $N=500$, 30\% MAR, Normal errors, 500 Monte Carlo replications:
 Method & $\|\hat{\bm{\Sigma}} - \bm{\Sigma}_{\text{true}}\|_F$ & Slope variance bias \\
 \midrule
 FIML (no completed data) & 1.51 & $+0.2\%$ \\
-\textbf{Smriti\_FIML} & \textbf{1.63} & \textbf{$+1.6\%$} \\
-Smriti\_Robust & 8.53 & $-37.9\%$ \\
-Smriti\_Default & 9.30 & $-45.1\%$ \\
+\textbf{Prism\_FIML} & \textbf{1.63} & \textbf{$+1.6\%$} \\
+Prism\_Robust & 8.53 & $-37.9\%$ \\
+Prism\_Default & 9.30 & $-45.1\%$ \\
 FIML\_Predict (lavPredict) & 6.70 & $+35.6\%$ \\
 missForest & 9.89 & $-66.6\%$ \\
 \bottomrule

@@ -7,10 +7,10 @@
 
 ```json
 {
-  "project_name": "lagrange",
+  "project_name": "prism",
   "directory_structure": [
     "README.md",
-    "src/lagrange.cpp",
+    "src/prism.cpp",
     "src/RcppExports.cpp",
     "hpc/",
     "man/",
@@ -28,14 +28,14 @@
     "hpc/simulation_production.R",
     "hpc/simulation_tune.R",
     "LICENSE",
-    "man/lagrange_fiml.Rd",
+    "man/prism_fiml.Rd",
     "manuscript_analysis.R",
     "manuscript_plots.R",
     "NAMESPACE",
     "R/RcppExports.R",
-    "R/lagrange-package.R",
-    "R/lagrange_fiml.R",
-    "R/lagrange_project.R",
+    "R/prism-package.R",
+    "R/prism_fiml.R",
+    "R/prism_project.R",
     "src/.gitignore",
     "src/Makevars",
     "src/Makevars.win",
@@ -44,11 +44,11 @@
   ],
   "readme": {
     "path": "README.md",
-    "excerpt": "# lagrange\n\n**lagrange** is an R package that produces a completed longitudinal dataset whose covariance structure matches the model-implied covariance from a FIML-estimated latent growth model. It fits the model via `lavaan`, extracts the structural target, and projects an initial imputation onto that manifold using a C++ Lagrangian-constrained gradient descent engine."
+    "excerpt": "# prism\n\n**prism** is an R package that produces a completed longitudinal dataset whose covariance structure matches the model-implied covariance from a FIML-estimated latent growth model. It fits the model via `lavaan`, extracts the structural target, and projects an initial imputation onto that manifold using a C++ Lagrangian-constrained gradient descent engine."
   },
   "config_files": [],
   "key_source_files": [
-    "src/lagrange.cpp",
+    "src/prism.cpp",
     "src/RcppExports.cpp"
   ],
   "counts": {

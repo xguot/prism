@@ -1,8 +1,8 @@
 ---
-title: "lagrange: FIML Covariance Projection for Longitudinal Missing Data"
+title: "prism: FIML Covariance Projection for Longitudinal Missing Data"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{lagrange: FIML Covariance Projection}
+  %\VignetteIndexEntry{prism: FIML Covariance Projection}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -23,7 +23,7 @@ computing conditional expectations via `lavPredict(type = "ov")` — attenuates
 the variance by 40–60%. This variance collapse destroys the statistical
 properties that FIML estimation preserves.
 
-The `lagrange` package bridges this gap: it produces a single completed dataset
+The `prism` package bridges this gap: it produces a single completed dataset
 whose covariance structure matches the FIML model-implied covariance matrix,
 without variance attenuation.
 
@@ -45,7 +45,7 @@ The pipeline has two steps:
 ## Basic Usage
 
 ```{r, eval = FALSE}
-library(lagrange)
+library(prism)
 library(lavaan)
 
 # Define a latent growth model
@@ -62,7 +62,7 @@ df <- data.frame(
 )
 
 # Impute with covariance projection
-result <- lagrange_fiml(df, model)
+result <- prism_fiml(df, model)
 print(result)
 ```
 
@@ -73,7 +73,7 @@ For better starting values, supply an initial imputation from any method:
 ```{r, eval = FALSE}
 library(missRanger)
 initial <- missRanger::missRanger(df, pmm.k = 5, num.trees = 100)
-result <- lagrange_fiml(df, model, initial_imputation = initial)
+result <- prism_fiml(df, model, initial_imputation = initial)
 ```
 
 ## Tuning Parameters

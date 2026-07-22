@@ -2,7 +2,7 @@
 .libPaths(c("~/R/rivanna-lib", .libPaths()))
 
 library(MASS)
-library(lagrange)
+library(prism)
 library(parallel)
 library(lavaan)
 library(missForest)
@@ -37,7 +37,7 @@ num_cores <- if (tune_mode == "coarse") {
 
 # ── Tuning Grid ──────────────────────────────────────────────────────────────
 # FIML is the sole baseline — MICE, missForest, missRanger are excluded.
-# Compares FIML estimation against lagrange_fiml completed-data recovery.
+# Compares FIML estimation against prism_fiml completed-data recovery.
 # grid_n, n_sims, and grid_dist are set by the speed toggle above.
 grid_miss   <- c(0.05, 0.15, 0.30)
 grid_mech   <- c("MAR", "MNAR")
@@ -184,7 +184,7 @@ run_iteration <- function(sim_id, params) {
     time_sec = unname(time_fiml)
   )
 
-  # ── Initial Imputation (shared across lagrange variants) ──────────────────
+  # ── Initial Imputation (shared across prism variants) ──────────────────
   imp_mf <- tryCatch(
     missForest::missForest(df_miss, verbose = FALSE)$ximp,
     error = function(e) NULL
@@ -198,11 +198,11 @@ run_iteration <- function(sim_id, params) {
     }
   }
 
-  # ── lagrange_fiml: FIML model-implied Σ target ───────────────────────────
-  tag_sf <- "lagrange_fiml"
+  # ── prism_fiml: FIML model-implied Σ target ───────────────────────────
+  tag_sf <- "prism_fiml"
   time_sf <- system.time({
     imp_sf <- tryCatch(
-      lagrange_fiml(df_miss, model = gcm_mod,
+      prism_fiml(df_miss, model = gcm_mod,
                   initial_imputation = imp_mf, lambda = 1.0),
       error = function(e) NULL
     )
@@ -244,7 +244,7 @@ conditions <- expand.grid(
   stringsAsFactors = FALSE
 )
 total_conditions <- nrow(conditions)
-n_variants <- 2  # FIML + lagrange_fiml
+n_variants <- 2  # FIML + prism_fiml
 
 # ── SLURM Array Dispatch ─────────────────────────────────────────────────────
 # When running under a SLURM job array, each task processes exactly one

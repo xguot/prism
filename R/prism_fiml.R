@@ -33,9 +33,9 @@
 #'   T2 = c(2.1, 2.5, NA, 4.0),
 #'   T3 = c(3.0, 3.3, 4.1, NA)
 #' )
-#' lagrange_fiml(df, model)
+#' prism_fiml(df, model)
 #' }
-lagrange_fiml <- function(data, model, initial_imputation = NULL,
+prism_fiml <- function(data, model, initial_imputation = NULL,
                          lambda = 1.0, learning_rate = 0.001,
                          tol = 1e-6, max_iter = 2000) {
   if (!requireNamespace("lavaan", quietly = TRUE)) {
@@ -64,7 +64,7 @@ lagrange_fiml <- function(data, model, initial_imputation = NULL,
   time_cols <- colnames(sigma_target)
 
   # Delegate to the internal projection engine
-  lagrange_project(
+  prism_project(
     data               = data,
     time_cols          = time_cols,
     sigma_target       = sigma_target,

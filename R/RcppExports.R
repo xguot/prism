@@ -2,5 +2,5 @@
 # Generator token: [redacted]
 
 constrain_covariance <- function(X_imp, mask, Sigma_target, lambda, lr, max_iter, tol) {
-    .Call(`_lagrange_constrain_covariance`, X_imp, mask, Sigma_target, lambda, lr, max_iter, tol)
+    .Call(`_prism_constrain_covariance`, X_imp, mask, Sigma_target, lambda, lr, max_iter, tol)
 }

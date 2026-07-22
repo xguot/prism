@@ -13,7 +13,7 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 
 // constrain_covariance
 Rcpp::List constrain_covariance(const arma::mat& X_imp, const arma::mat& mask, const arma::mat& Sigma_target, double lambda, double lr, int max_iter, double tol);
-RcppExport SEXP _lagrange_constrain_covariance(SEXP X_impSEXP, SEXP maskSEXP, SEXP Sigma_targetSEXP, SEXP lambdaSEXP, SEXP lrSEXP, SEXP max_iterSEXP, SEXP tolSEXP) {
+RcppExport SEXP _prism_constrain_covariance(SEXP X_impSEXP, SEXP maskSEXP, SEXP Sigma_targetSEXP, SEXP lambdaSEXP, SEXP lrSEXP, SEXP max_iterSEXP, SEXP tolSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -30,11 +30,11 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_lagrange_constrain_covariance", (DL_FUNC) &_lagrange_constrain_covariance, 7},
+    {"_prism_constrain_covariance", (DL_FUNC) &_prism_constrain_covariance, 7},
     {NULL, NULL, 0}
 };
 
-RcppExport void R_init_lagrange(DllInfo *dll) {
+RcppExport void R_init_prism(DllInfo *dll) {
     R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
     R_useDynamicSymbols(dll, FALSE);
 }

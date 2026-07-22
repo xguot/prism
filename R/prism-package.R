@@ -1,5 +1,5 @@
 ## usethis namespace: start
 #' @importFrom Rcpp sourceCpp
-#' @useDynLib lagrange, .registration = TRUE
+#' @useDynLib prism, .registration = TRUE
 ## usethis namespace: end
 NULL

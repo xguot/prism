@@ -37,7 +37,7 @@
 #'   e.g. \code{lambda}, \code{learning_rate}, \code{tol}, \code{max_iter}.
 #'
 #' @return A list of \code{m} completed data frames (class
-#'   \code{"lagrange_mi_list"}), or a \code{mids} object if
+#'   \code{"prism_mi_list"}), or a \code{mids} object if
 #'   \code{return_mids = TRUE}.
 #' @export
 #'
@@ -52,16 +52,16 @@
 #'   T3 = c(3.0, 3.3, 4.1, NA)
 #' )
 #' fit <- growth(model, data = df, missing = "fiml")
-#' mi_list <- lagrange_mi(df, fit, m = 20)
+#' mi_list <- prism_mi(df, fit, m = 20)
 #' }
-lagrange_mi <- function(data, fit, m = 20, initial_imputation = NULL,
+prism_mi <- function(data, fit, m = 20, initial_imputation = NULL,
                         return_mids = FALSE, ...) {
   if (!inherits(fit, "lavaan")) {
     stop("'fit' must be a fitted lavaan object.", call. = FALSE)
   }
 
   if (!requireNamespace("MASS", quietly = TRUE)) {
-    stop("Package 'MASS' is required for lagrange_mi(). ",
+    stop("Package 'MASS' is required for prism_mi(). ",
          "Install it with install.packages('MASS').", call. = FALSE)
   }
 
@@ -105,7 +105,7 @@ lagrange_mi <- function(data, fit, m = 20, initial_imputation = NULL,
     colnames(sigma_i) <- time_cols
     rownames(sigma_i) <- time_cols
 
-    imputations[[i]] <- lagrange_project(
+    imputations[[i]] <- prism_project(
       data               = data,
       time_cols          = time_cols,
       sigma_target       = sigma_i,
@@ -115,7 +115,7 @@ lagrange_mi <- function(data, fit, m = 20, initial_imputation = NULL,
     attr(imputations[[i]], "imputation") <- i
   }
 
-  class(imputations) <- c("lagrange_mi_list", "list")
+  class(imputations) <- c("prism_mi_list", "list")
 
   if (return_mids) {
     if (!requireNamespace("mice", quietly = TRUE)) {

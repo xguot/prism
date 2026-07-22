@@ -4,9 +4,9 @@
 #SBATCH -t 12:00:00
 #SBATCH --array=1-192
 #SBATCH -A tongx
-#SBATCH -J lagrange_prod
-#SBATCH -o hpc/logs/prod_%A_%a.out
-#SBATCH -e hpc/logs/prod_%A_%a.err
+#SBATCH -J prism_prod
+#SBATCH -o simulations/logs/prod_%A_%a.out
+#SBATCH -e simulations/logs/prod_%A_%a.err
 #SBATCH --mem=16G
 
 # Load Rivanna environment modules
@@ -18,7 +18,7 @@ module load R/4.4.1
 export R_LIBS_USER=~/R/rivanna-lib
 
 # Ensure log directory exists
-mkdir -p hpc/logs
+mkdir -p simulations/logs
 
 # Neutralize multi-threaded BLAS to prevent contention during R-level parallelization
 export OMP_NUM_THREADS=1
@@ -26,5 +26,5 @@ export MKL_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 
 # Execute the simulation for the current array task (condition)
-echo "Starting Smriti Production Task ${SLURM_ARRAY_TASK_ID} on $(hostname)..."
-Rscript hpc/simulation_production.R
+echo "Starting prism Production Task ${SLURM_ARRAY_TASK_ID} on $(hostname)..."
+Rscript simulations/simulation_production.R

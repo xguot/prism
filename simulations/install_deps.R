@@ -1,4 +1,4 @@
-# Install dependencies for lagrange
+# Install dependencies for prism
 lib_path <- "~/R/rivanna-lib"
 dir.create(lib_path, recursive = TRUE, showWarnings = FALSE)
 .libPaths(c(lib_path, .libPaths()))

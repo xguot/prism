@@ -1,4 +1,4 @@
-library(lagrange)
+library(prism)
 library(lavaan)
 
 # Test Data Generation
@@ -16,7 +16,7 @@ model <- "
 "
 
 cat("Running Test 1: Basic FIML projection...\n")
-result <- lagrange_fiml(df_miss, model)
+result <- prism_fiml(df_miss, model)
 
 if (any(is.na(result))) {
   stop("Test 1 Failed: Imputed dataset contains NAs.")
@@ -36,14 +36,14 @@ initial <- df_miss
 for (j in 1:3) {
   initial[is.na(initial[, j]), j] <- mean(initial[, j], na.rm = TRUE)
 }
-result2 <- lagrange_fiml(df_miss, model, initial_imputation = initial)
+result2 <- prism_fiml(df_miss, model, initial_imputation = initial)
 if (any(is.na(result2))) {
   stop("Test 2 Failed: Imputed dataset contains NAs.")
 }
 cat("Test 2 Passed.\n")
 
 cat("Running Test 3: Convergence with default lambda...\n")
-result3 <- lagrange_fiml(df_miss, model, lambda = 1.0, tol = 1e-4)
+result3 <- prism_fiml(df_miss, model, lambda = 1.0, tol = 1e-4)
 if (any(is.na(result3))) {
   stop("Test 3 Failed: Imputed dataset contains NAs.")
 }
@@ -51,7 +51,7 @@ cat("Test 3 Passed.\n")
 
 cat("Running Test 4: Numerical guard — nearest PSD projection...\n")
 non_psd <- matrix(c(1, 2, 2, 1), 2, 2)
-psd_fixed <- lagrange:::nearest_psd(non_psd)
+psd_fixed <- prism:::nearest_psd(non_psd)
 eig_vals  <- eigen(psd_fixed, only.values = TRUE)$values
 if (any(eig_vals < -1e-12)) {
   stop("Test 4 Failed: nearest_psd did not yield a positive semidefinite matrix.")
@@ -62,7 +62,7 @@ cat("Running Test 5: Error on 100% missing column...\n")
 df_broken <- df_miss
 df_broken$T1 <- as.numeric(NA)
 err_msg <- tryCatch(
-  lagrange_fiml(df_broken, model),
+  prism_fiml(df_broken, model),
   error = function(e) e$message
 )
 if (!grepl("100% missing", err_msg)) {
@@ -74,7 +74,7 @@ cat("Running Test 6: Error on non-numeric column...\n")
 df_bad <- df_miss
 df_bad$T1 <- as.character(df_bad$T1)
 err_msg2 <- tryCatch(
-  lagrange_fiml(df_bad, model),
+  prism_fiml(df_bad, model),
   error = function(e) e$message
 )
 if (!grepl("numeric", err_msg2)) {
@@ -84,10 +84,10 @@ cat("Test 6 Passed.\n")
 
 cat("Running Test 7: Multiple imputation via parameter perturbation...\n")
 fit <- lavaan::growth(model, data = df_miss, missing = "fiml")
-mi_list <- lagrange_mi(df_miss, fit, m = 3)
+mi_list <- prism_mi(df_miss, fit, m = 3)
 
-if (!inherits(mi_list, "lagrange_mi_list")) {
-  stop("Test 7 Failed: Output is not of class 'lagrange_mi_list'.")
+if (!inherits(mi_list, "prism_mi_list")) {
+  stop("Test 7 Failed: Output is not of class 'prism_mi_list'.")
 }
 if (length(mi_list) != 3) {
   stop(sprintf("Test 7 Failed: Expected 3 imputations, got %d.", length(mi_list)))

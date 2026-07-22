@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════════════════
-# Manuscript-Level Performance Analysis for lagrange
+# Manuscript-Level Performance Analysis for prism
 # Style adapted from mda/analysis.R — parameter-level breakdown, MSE, heatmaps
 # Uses prod_results.rds (post-HPC) and tune_results.rds
 # ══════════════════════════════════════════════════════════════════════════════
@@ -242,9 +242,9 @@ if (tune_exists) {
     for (line in subset_rows) cat("  ", line, "\n")
   }
 
-  hr("TABLE T2 — FIML vs lagrange_fiml (Tuning Study Summary)")
+  hr("TABLE T2 — FIML vs prism_fiml (Tuning Study Summary)")
   tune %>%
-    filter(mech == "MAR", method %in% c("FIML", "lagrange_fiml")) %>%
+    filter(mech == "MAR", method %in% c("FIML", "prism_fiml")) %>%
     group_by(method) %>%
     summarise(
       Frob = mean(f_dist, na.rm = TRUE),

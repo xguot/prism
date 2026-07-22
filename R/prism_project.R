@@ -28,7 +28,7 @@ nearest_psd <- function(mat) {
 # gradient descent.  Only originally-missing cells are updated.
 #
 #' @keywords internal
-lagrange_project <- function(data, time_cols, sigma_target,
+prism_project <- function(data, time_cols, sigma_target,
                             initial_imputation = NULL,
                             lambda = 1.0, learning_rate = 0.001,
                             tol = 1e-6, max_iter = 2000) {

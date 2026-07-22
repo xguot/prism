@@ -4,12 +4,12 @@
 #SBATCH -t 12:00:00
 #SBATCH --array=1-54
 #SBATCH -A tongx
-#SBATCH -J lagrange_tune
-#SBATCH -o hpc/logs/tune_%A_%a.out
-#SBATCH -e hpc/logs/tune_%A_%a.err
+#SBATCH -J prism_tune
+#SBATCH -o simulations/logs/tune_%A_%a.out
+#SBATCH -e simulations/logs/tune_%A_%a.err
 #SBATCH --mem=16G
 
-# ── Tuning Array: rapid FIML-vs-Smriti hyperparameter sweep ─────────────────
+# ── Tuning Array: rapid FIML-vs-prism comparison ────────────────────────
 # Splits the 54-condition coarse grid (3 N × 3 miss × 3 dist × 2 mech)
 # across 54 array tasks. Each task loops over 5 lambda × 2 robust values
 # internally, producing a single tune_results_<task>.rds file.
@@ -28,7 +28,7 @@ module load R/4.4.1
 export R_LIBS_USER=~/R/rivanna-lib
 
 # Ensure log directory exists
-mkdir -p hpc/logs
+mkdir -p simulations/logs
 mkdir -p sim_results
 
 # Neutralize multi-threaded BLAS to prevent contention
@@ -36,5 +36,5 @@ export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 
-echo "Starting Smriti Tuning Task ${SLURM_ARRAY_TASK_ID} on $(hostname)..."
-Rscript hpc/simulation_tune.R
+echo "Starting prism Tuning Task ${SLURM_ARRAY_TASK_ID} on $(hostname)..."
+Rscript simulations/simulation_tune.R
