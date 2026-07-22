@@ -13,17 +13,15 @@ Sys.setenv(OMP_NUM_THREADS = "1", MKL_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = 
 set.seed(20250523)
 
 # ── Speed Toggle (must precede grid + core count) ────────────────────────────
-# "coarse"  — quick pass (~1 hr local):   3 N, 5 lambda, 2 robust, 2 dist, 100 reps
-# "full"    — proper tuning (~6 hr local): 5 N, 7 lambda, 2 robust, 2 dist, 200 reps
+# "coarse"  — quick pass (~1 hr local):   3 N, 2 dist, 100 reps
+# "full"    — proper tuning (~6 hr local): 5 N, 2 dist, 200 reps
 tune_mode <- "coarse"
 if (tune_mode == "coarse") {
   grid_n      <- c(200, 500, 5000)
-  grid_lambda <- c(0.01, 0.05, 0.1, 1.0, 5.0)
   n_sims      <- 100
   grid_dist   <- c("Normal", "t5", "Lognormal")
 } else {
   grid_n      <- c(100, 200, 500, 1000, 5000)
-  grid_lambda <- c(0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0)
   n_sims      <- 200
   grid_dist   <- c("Normal", "t5", "Lognormal")
 }
@@ -39,15 +37,11 @@ num_cores <- if (tune_mode == "coarse") {
 
 # ── Tuning Grid ──────────────────────────────────────────────────────────────
 # FIML is the sole baseline — MICE, missForest, missRanger are excluded.
-# The lagrange Lagrangian step is ~0.02s per variant, so sweeping 5 lambda ×
-# 2 robust combinations adds only ~15% overhead over a single config.
-# grid_n, grid_lambda, n_sims, and grid_dist are set by the speed toggle above.
+# Compares FIML estimation against lagrange_fiml completed-data recovery.
+# grid_n, n_sims, and grid_dist are set by the speed toggle above.
 grid_miss   <- c(0.05, 0.15, 0.30)
 grid_mech   <- c("MAR", "MNAR")
 t_points    <- 4
-
-# Smriti hyperparameter candidates to evaluate against FIML
-grid_robust <- c(TRUE, FALSE)
 
 # ── True Population Parameters ───────────────────────────────────────────────
 mu_i <- 6.0; mu_s <- 2.0; v_i <- 1.0; v_s <- 1.0; c_is <- 0.0; v_e <- 1.0
@@ -204,56 +198,8 @@ run_iteration <- function(sim_id, params) {
     }
   }
 
-  # ── Smriti variants (grid over lambda × robust) ─────────────────────────
-  lambdas <- params$lambdas[[1]]
-  robusts <- params$robusts[[1]]
-  for (lam in lambdas) {
-    for (rb in robusts) {
-      tag <- sprintf("Smriti_l%.2f_%s", lam, if (rb) "R" else "S")
-      time_sm <- system.time({
-        imp_sm <- tryCatch(
-          lagrange_impute(df_miss, time_cols = 1:t_points,
-                        initial_imputation = imp_mf,
-                        lambda = lam, robust = rb),
-          error = function(e) NULL
-        )
-        s_var_s <- NA; s_se_s <- NA; d_sm <- NA; rb_s <- NA
-        if (!is.null(imp_sm)) {
-          cov_imp <- stats::cov(imp_sm[, 1:t_points])
-          d_sm <- frob_dist(cov_imp, true_cov)
-          fit_sm <- tryCatch(
-            growth(gcm_mod, data = imp_sm),
-            error = function(e) NULL
-          )
-          if (!is.null(fit_sm)) {
-            pt <- parameterEstimates(fit_sm)
-            row <- pt[pt$lhs == "s" & pt$op == "~~" & pt$rhs == "s", ]
-            if (nrow(row) > 0) {
-              s_var_s <- row$est[1]
-              s_se_s  <- row$se[1]
-              rb_s    <- rel_bias(s_var_s, v_s)
-            }
-          }
-        }
-      })["elapsed"]
-      res_list[[length(res_list) + 1]] <- data.frame(
-        sim_id = sim_id, N = params$n, miss = params$miss,
-        actual_miss = act_m,
-        dist = params$dist,
-        mech = params$mech, method = tag, lambda = lam, robust = rb,
-        f_dist = d_sm, s_var = s_var_s, s_se = s_se_s, rel_bias = rb_s,
-        time_sec = unname(time_sm)
-      )
-    }
-  }
-
-  # ── Smriti_FIML: MAR-consistent target (λ = 1.0) ─────────────────────────
-  # Uses lavaan FIML to extract the model-implied Σ as the structural target.
-  # This is the correct comparison for MAR data — pairwise-deletion targets
-  # (the lambdas × robusts grid above) are systematically biased under MAR
-  # dropout.  Included here so the tuning table can show FIML-Σ performance
-  # alongside the pairwise-target variants.
-  tag_sf <- "Smriti_FIML"
+  # ── lagrange_fiml: FIML model-implied Σ target ───────────────────────────
+  tag_sf <- "lagrange_fiml"
   time_sf <- system.time({
     imp_sf <- tryCatch(
       lagrange_fiml(df_miss, model = gcm_mod,
@@ -297,11 +243,8 @@ conditions <- expand.grid(
   n = grid_n, miss = grid_miss, dist = grid_dist, mech = grid_mech,
   stringsAsFactors = FALSE
 )
-# Each condition carries the full hyperparameter grid for lagrange
-conditions$lambdas <- list(grid_lambda)
-conditions$robusts <- list(grid_robust)
 total_conditions <- nrow(conditions)
-n_variants <- 2 + length(grid_lambda) * length(grid_robust)  # FIML + Smriti_FIML + lagrange combos
+n_variants <- 2  # FIML + lagrange_fiml
 
 # ── SLURM Array Dispatch ─────────────────────────────────────────────────────
 # When running under a SLURM job array, each task processes exactly one
@@ -320,7 +263,7 @@ cat(sprintf("Speed Toggle: %s\n", tune_mode))
 cat(sprintf("Grid: %d conditions × %d reps × %d variants = %d total rows\n",
             total_conditions, n_sims, n_variants,
             total_conditions * n_sims * n_variants))
-cat(sprintf("Lambda grid: %s\n", paste(grid_lambda, collapse = ", ")))
+
 cat(sprintf("Parallel cores: %d\n", num_cores))
 cat(sprintf("Output: %s\n\n", output_file))
 

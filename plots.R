@@ -6,7 +6,7 @@
 # same theme_mda() and scale_method_aes blocks so the output is visually
 # uniform and matches the mda canon.
 #
-# Output (22 plots → figs/, 7 imputation methods, FIML excluded — it estimates
+# Output (16 plots → figs/, 5 imputation methods, FIML excluded — it estimates
 # parameters but does not produce completed data):
 #   fig1a_frobenius_overview_mar.pdf         facet_grid(dist ~ N_label)
 #   fig1b_frobenius_overview_mnar.pdf
@@ -47,11 +47,11 @@ theme_mda <- function(legend_pos = "bottom") {
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Shared scales — mda color palette for baselines, warm tones for Smriti
+# Shared scales — mda color palette for baselines, red for lagrange
 # ══════════════════════════════════════════════════════════════════════════════
 method_levels <- c(
   "FIML_Predict", "MICE", "missForest", "missRanger",
-  "Smriti_FIML", "Smriti_Default", "Smriti_Robust"
+  "lagrange_fiml"
 )
 
 method_colors <- c(
@@ -59,9 +59,7 @@ method_colors <- c(
   "MICE"           = "#4DAF4A",   # green — multiple imputation
   "missForest"     = "#984EA3",   # purple — ML single imputation
   "missRanger"     = "#FF7F00",   # orange — fast ML baseline
-  "Smriti_FIML"    = "#E41A1C",   # red — primary proposed method
-  "Smriti_Default" = "#A65628",   # brown — pairwise-target variant
-  "Smriti_Robust"  = "#F781BF"    # pink — robust variant
+  "lagrange_fiml"  = "#E41A1C"    # red — primary proposed method
 )
 
 # Solid for proposed methods, dashed/dotted for baselines
@@ -70,9 +68,7 @@ method_linetypes <- c(
   "MICE"           = "dotdash",
   "missForest"     = "longdash",
   "missRanger"     = "dotted",
-  "Smriti_FIML"    = "solid",
-  "Smriti_Default" = "solid",
-  "Smriti_Robust"  = "solid"
+  "lagrange_fiml"  = "solid"
 )
 
 scale_method_aes <- list(

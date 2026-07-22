@@ -235,7 +235,7 @@ run_iteration <- function(sim_id, params) {
   # the "obvious" way to get completed data from a FIML model — but the
   # conditional expectations are shrunk toward the mean, attenuating variance.
   # Included here as a baseline to demonstrate that the naive FIML-completed
-  # dataset fails at the covariance level, motivating the Smriti projection.
+  # dataset fails at the covariance level, motivating the lagrange projection.
   time_fp <- system.time({
     s_var_fp <- NA; s_se_fp <- NA; d_fp <- NA
     gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
@@ -340,60 +340,10 @@ run_iteration <- function(sim_id, params) {
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"])
 
-  # ── Smriti: default (Pearson target, λ = 1.0) ────────────────────────────
-  # NOTE: lagrange reuses missForest's output as initial_imputation so the
-  # Lagrangian routing benefit is measured in isolation.  time_sec captures
-  # only the routing step; pipeline_time includes the full end-to-end cost
-  # (missForest initialisation + lagrange routing).
-  time_sd <- system.time({
-    imp_sd <- tryCatch(lagrange_impute(df_miss, time_cols = 1:t_points,
-                       initial_imputation = imp_mf, lambda = 1.0, robust = FALSE),
-                       error = function(e) NULL)
-    s_var_sd <- NA; s_se_sd <- NA; d_sd <- NA
-    gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
-    if (!is.null(imp_sd)) {
-      d_sd <- frob_dist(stats::cov(imp_sd[, 1:t_points]), true_cov)
-      sv <- extract_slope_var(imp_sd, gcm_mod)
-      s_var_sd <- sv["s_var"]; s_se_sd <- sv["s_se"]
-      fit_sd <- tryCatch(growth(gcm_mod, data = imp_sd), error = function(e) NULL)
-      if (!is.null(fit_sd)) gp <- extract_gcm_params(fit_sd)
-    }
-  })["elapsed"]
-  res_list[[6]] <- make_row("Smriti_Default", d_sd, s_var_sd, s_se_sd,
-                            unname(time_sd),
-                            beta_L = gp["beta_L"], beta_S = gp["beta_S"],
-                            psi_L = gp["psi_L"], psi_S = gp["psi_S"],
-                            psi_LS = gp["psi_LS"],
-                            pipeline_time = unname(time_mf) + unname(time_sd))
-
-  # ── Smriti: robust (Spearman + MAD target, λ = 1.0) ──────────────────────
-  time_sr <- system.time({
-    imp_sr <- tryCatch(lagrange_impute(df_miss, time_cols = 1:t_points,
-                       initial_imputation = imp_mf, lambda = 1.0, robust = TRUE),
-                       error = function(e) NULL)
-    s_var_sr <- NA; s_se_sr <- NA; d_sr <- NA
-    gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
-    if (!is.null(imp_sr)) {
-      d_sr <- frob_dist(stats::cov(imp_sr[, 1:t_points]), true_cov)
-      sv <- extract_slope_var(imp_sr, gcm_mod)
-      s_var_sr <- sv["s_var"]; s_se_sr <- sv["s_se"]
-      fit_sr <- tryCatch(growth(gcm_mod, data = imp_sr), error = function(e) NULL)
-      if (!is.null(fit_sr)) gp <- extract_gcm_params(fit_sr)
-    }
-  })["elapsed"]
-  res_list[[7]] <- make_row("Smriti_Robust", d_sr, s_var_sr, s_se_sr,
-                            unname(time_sr),
-                            beta_L = gp["beta_L"], beta_S = gp["beta_S"],
-                            psi_L = gp["psi_L"], psi_S = gp["psi_S"],
-                            psi_LS = gp["psi_LS"],
-                            pipeline_time = unname(time_mf) + unname(time_sr))
-
-  # ── Smriti: FIML model-implied Σ target (MAR-consistent) ─────────────────
+  # ── lagrange_fiml: FIML model-implied Σ target ───────────────────────────
   # Uses lagrange_fiml() which fits a lavaan growth model with FIML to extract
   # the model-implied covariance as the structural target, then projects the
-  # missForest initial imputation toward it.  This is the correct Smriti
-  # variant for MAR data — pairwise-deletion targets (Default / Robust)
-  # are biased toward survivors and should not be used under MAR dropout.
+  # missForest initial imputation toward it.
   time_sf <- system.time({
     imp_sf <- tryCatch(lagrange_fiml(df_miss, model = gcm_mod,
                        initial_imputation = imp_mf, lambda = 1.0),
@@ -408,14 +358,14 @@ run_iteration <- function(sim_id, params) {
       if (!is.null(fit_sf)) gp <- extract_gcm_params(fit_sf)
     }
   })["elapsed"]
-  res_list[[8]] <- make_row("Smriti_FIML", d_sf, s_var_sf, s_se_sf,
+  res_list[[6]] <- make_row("lagrange_fiml", d_sf, s_var_sf, s_se_sf,
                             unname(time_sf),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"],
                             pipeline_time = unname(time_mf) + unname(time_sf))
 
-  rm(df_true, df_miss, imp_mice, imp_mf, imp_mr, imp_sd, imp_sr, imp_sf, imp_fp)
+  rm(df_true, df_miss, imp_mice, imp_mf, imp_mr, imp_sf, imp_fp)
   do.call(rbind, res_list)
 }
 
@@ -434,8 +384,8 @@ if (!is.na(array_id) && array_id >= 1 && array_id <= total_conditions) {
 }
 
 # ── Execution ────────────────────────────────────────────────────────────────
-cat(sprintf("Grid: %d conditions × %d reps × 8 methods = %d total rows\n",
-            total_conditions, n_sims, total_conditions * n_sims * 8))
+cat(sprintf("Grid: %d conditions × %d reps × 6 methods = %d total rows\n",
+            total_conditions, n_sims, total_conditions * n_sims * 6))
 cat(sprintf("Parallel cores: %d\n", num_cores))
 cat(sprintf("Output: %s\n\n", output_file))
 

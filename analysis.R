@@ -242,9 +242,9 @@ if (tune_exists) {
     for (line in subset_rows) cat("  ", line, "\n")
   }
 
-  hr("TABLE T2 — FIML vs Smriti_FIML (Tuning Study Summary)")
+  hr("TABLE T2 — FIML vs lagrange_fiml (Tuning Study Summary)")
   tune %>%
-    filter(mech == "MAR", method %in% c("FIML", "Smriti_FIML")) %>%
+    filter(mech == "MAR", method %in% c("FIML", "lagrange_fiml")) %>%
     group_by(method) %>%
     summarise(
       Frob = mean(f_dist, na.rm = TRUE),
