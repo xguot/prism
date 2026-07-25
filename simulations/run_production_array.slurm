@@ -27,4 +27,4 @@ export OPENBLAS_NUM_THREADS=1
 
 # Execute the simulation for the current array task (condition)
 echo "Starting prism Production Task ${SLURM_ARRAY_TASK_ID} on $(hostname)..."
-Rscript simulations/simulation_production.R
+Rscript simulations/simulation.R

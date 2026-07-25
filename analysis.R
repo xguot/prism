@@ -1,15 +1,13 @@
 # ══════════════════════════════════════════════════════════════════════════════
 # Manuscript-Level Performance Analysis for prism
 # Style adapted from mda/analysis.R — parameter-level breakdown, MSE, heatmaps
-# Uses prod_results.rds (post-HPC) and tune_results.rds
+# Uses prod_results.rds (post-HPC)
 # ══════════════════════════════════════════════════════════════════════════════
 
 library(dplyr)
 library(tidyr)
 
 prod  <- readRDS("sim_results/prod_results.rds")
-tune_file <- "sim_results/tune_results.rds"
-tune_exists <- file.exists(tune_file)
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
 hr <- function(label) {
@@ -18,6 +16,25 @@ hr <- function(label) {
   cat(strrep("=", 90), "\n\n", sep = "")
 }
 
+compute_metrics <- function(results, true_slope = 1.0) {
+  # Filter for converged iterations (models that produced valid estimates)
+  valid <- results %>%
+    filter(converged == 1, is.finite(s_var), is.finite(s_se))
+
+  valid %>%
+    group_by(method) %>%
+    summarise(
+      n_converged    = n(),
+      mean_estimate  = mean(s_var, na.rm = TRUE),
+      empirical_se   = sd(s_var, na.rm = TRUE),
+      avg_model_se   = mean(s_se, na.rm = TRUE),
+      .groups        = "drop"
+    ) %>%
+    mutate(
+      bias     = mean_estimate - true_slope,
+      se_ratio = avg_model_se / empirical_se
+    )
+}
 beta_true   <- c(psi_L = 1, psi_S = 1, psi_LS = 0, beta_L = 6, beta_S = 2)
 param_names <- names(beta_true)
 param_labels <- c(
@@ -30,14 +47,6 @@ param_labels <- c(
 
 cat(sprintf("Production data: %d rows, %d methods\n",
             nrow(prod), length(unique(prod$method))))
-if (tune_exists) {
-  tune <- readRDS(tune_file)
-  cat(sprintf("Tuning data:     %d rows, lambda in {%s}\n",
-              nrow(tune), paste(sort(unique(tune$lambda)), collapse = ", ")))
-} else {
-  tune <- NULL
-  warning("tune_results.rds not found. Skipping tuning-dependent tables.")
-}
 
 # ── Build per-parameter long table (all methods, all conditions) ─────────────
 # Map production column names to GCM parameter names
@@ -58,6 +67,14 @@ all_params <- do.call(rbind, lapply(param_names, function(pn) {
     ) %>%
     select(sim_id, N, miss, dist, mech, method, param, est, bias_raw, relbias)
 }))
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TABLE 0 — Convergence Rate, Empirical SE, and SE Ratio (psi_S)
+# ══════════════════════════════════════════════════════════════════════════════
+hr("TABLE 0 — Slope Variance: Convergence, Empirical SE, Model SE, SE Ratio")
+
+se_metrics <- compute_metrics(prod)
+print(se_metrics, row.names = FALSE)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TABLE 1 — Frobenius Distance (primary metric)
@@ -214,43 +231,3 @@ all_params %>%
   arrange(method) %>%
   as.data.frame() %>%
   print(row.names = FALSE)
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Tuning-dependent tables
-# ══════════════════════════════════════════════════════════════════════════════
-if (tune_exists) {
-  hr("TABLE T1 — Lambda Tuning: Frobenius by lambda x robust (MAR, pooled)")
-
-  tune %>%
-    filter(mech == "MAR") %>%
-    group_by(lambda, robust, dist) %>%
-    summarise(
-      Frobenius = mean(f_dist, na.rm = TRUE),
-      Bias_pct  = mean(rel_bias, na.rm = TRUE),
-      .groups   = "drop"
-    ) %>%
-    mutate(
-      Robust  = ifelse(robust, "Robust", "Pearson"),
-      Display = sprintf("lambda=%.2f %-7s  Frob=%.2f  Bias=%+.1f%%",
-                        lambda, Robust, Frobenius, Bias_pct)
-    ) %>%
-    arrange(dist, lambda, desc(robust)) -> tune_tbl
-
-  for (d in unique(tune_tbl$dist)) {
-    cat(sprintf("\n  -- %s --\n", d))
-    subset_rows <- tune_tbl %>% filter(dist == d) %>% pull(Display)
-    for (line in subset_rows) cat("  ", line, "\n")
-  }
-
-  hr("TABLE T2 — FIML vs prism_fiml (Tuning Study Summary)")
-  tune %>%
-    filter(mech == "MAR", method %in% c("FIML", "prism_fiml")) %>%
-    group_by(method) %>%
-    summarise(
-      Frob = mean(f_dist, na.rm = TRUE),
-      SD   = sd(f_dist, na.rm = TRUE),
-      .groups = "drop"
-    ) %>%
-    as.data.frame() %>%
-    print(row.names = FALSE)
-}

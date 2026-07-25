@@ -189,6 +189,7 @@ run_iteration <- function(sim_id, params) {
       s_var     = s_var,
       s_var_bias = rel_bias(s_var, v_s),
       s_se      = s_se,
+      converged = as.integer(!is.na(s_var) & is.finite(s_var)),
       est_L     = beta_L,   est_S     = beta_S,
       est_var_L = psi_L,    est_var_S = psi_S,    est_cov_LS = psi_LS,
       bias_L    = rel_bias(beta_L, mu_i),
@@ -257,13 +258,39 @@ run_iteration <- function(sim_id, params) {
                             unname(time_fp),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
+                             psi_LS = gp["psi_LS"])
+
+  # ── FIML + Stochastic Regression: conditional draws ───────────────────────
+  # Uses model-implied moments to draw missing values from their conditional
+  # predictive distribution (Schafer 1997). Preserves first and second moments
+  # asymptotically but does not target exact sample covariance structure.
+  time_sr <- system.time({
+    s_var_sr <- NA; s_se_sr <- NA; d_sr <- NA
+    gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
+    if (!is.null(fit_fiml)) {
+      imp_sr <- tryCatch(stochastic_fiml_impute(df_miss, fit_fiml),
+                         error = function(e) NULL)
+      if (!is.null(imp_sr)) {
+        d_sr <- frob_dist(stats::cov(imp_sr[, 1:t_points]), true_cov)
+        sv <- extract_slope_var(imp_sr, gcm_mod)
+        s_var_sr <- sv["s_var"]; s_se_sr <- sv["s_se"]
+        fit_sr <- tryCatch(growth(gcm_mod, data = imp_sr),
+                           error = function(e) NULL)
+        if (!is.null(fit_sr)) gp <- extract_gcm_params(fit_sr)
+      }
+    }
+  })["elapsed"]
+  res_list[[3]] <- make_row("FIML_Stochastic", d_sr, s_var_sr, s_se_sr,
+                            unname(time_sr),
+                            beta_L = gp["beta_L"], beta_S = gp["beta_S"],
+                            psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"])
 
   # ── MICE Baseline (MI m=20) ─────────────────────────────────────────────────
   time_mice <- system.time({
     m_mice <- 20
     imp_mice_list <- tryCatch({
-      imp_obj <- mice::mice(df_miss, m = m_mice, method = "cart", printFlag = FALSE)
+      imp_obj <- mice::mice(df_miss, m = m_mice, method = "norm", printFlag = FALSE)
       mice::complete(imp_obj, "all")
     }, error = function(e) NULL)
 
@@ -297,7 +324,7 @@ run_iteration <- function(sim_id, params) {
       }
     }
   })["elapsed"]
-  res_list[[3]] <- make_row("MICE", d_m, s_var_m, s_se_m, unname(time_mice),
+  res_list[[4]] <- make_row("MICE", d_m, s_var_m, s_se_m, unname(time_mice),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"])
@@ -316,7 +343,7 @@ run_iteration <- function(sim_id, params) {
       if (!is.null(fit_mf)) gp <- extract_gcm_params(fit_mf)
     }
   })["elapsed"]
-  res_list[[4]] <- make_row("missForest", d_mf, s_var_mf, s_se_mf, unname(time_mf),
+  res_list[[5]] <- make_row("missForest", d_mf, s_var_mf, s_se_mf, unname(time_mf),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"])
@@ -335,7 +362,7 @@ run_iteration <- function(sim_id, params) {
       if (!is.null(fit_mr)) gp <- extract_gcm_params(fit_mr)
     }
   })["elapsed"]
-  res_list[[5]] <- make_row("missRanger", d_mr, s_var_mr, s_se_mr, unname(time_mr),
+  res_list[[6]] <- make_row("missRanger", d_mr, s_var_mr, s_se_mr, unname(time_mr),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"])
@@ -358,7 +385,7 @@ run_iteration <- function(sim_id, params) {
       if (!is.null(fit_sf)) gp <- extract_gcm_params(fit_sf)
     }
   })["elapsed"]
-  res_list[[6]] <- make_row("prism_fiml", d_sf, s_var_sf, s_se_sf,
+  res_list[[7]] <- make_row("prism_fiml", d_sf, s_var_sf, s_se_sf,
                             unname(time_sf),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
@@ -401,14 +428,14 @@ run_iteration <- function(sim_id, params) {
       }
     }
   })["elapsed"]
-  res_list[[7]] <- make_row("prism_mi", d_smi, s_var_smi, s_se_smi,
+  res_list[[8]] <- make_row("prism_mi", d_smi, s_var_smi, s_se_smi,
                             unname(time_smi),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"],
                             pipeline_time = unname(time_mf) + unname(time_smi))
 
-  rm(df_true, df_miss, imp_mice, imp_mf, imp_mr, imp_sf, imp_fp, imp_smi_list)
+  rm(df_true, df_miss, imp_sr, imp_mice_list, imp_mf, imp_mr, imp_sf, imp_fp, imp_smi_list)
   do.call(rbind, res_list)
 }
 
@@ -427,8 +454,8 @@ if (!is.na(array_id) && array_id >= 1 && array_id <= total_conditions) {
 }
 
 # ── Execution ────────────────────────────────────────────────────────────────
-cat(sprintf("Grid: %d conditions × %d reps × 7 methods = %d total rows\n",
-            total_conditions, n_sims, total_conditions * n_sims * 7))
+cat(sprintf("Grid: %d conditions × %d reps × 8 methods = %d total rows\n",
+            total_conditions, n_sims, total_conditions * n_sims * 8))
 cat(sprintf("Parallel cores: %d\n", num_cores))
 cat(sprintf("Output: %s\n\n", output_file))
 
