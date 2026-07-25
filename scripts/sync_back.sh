@@ -23,13 +23,6 @@ rsync -avz --progress \
   "${REMOTE}:${SRC}/sim_results/" \
   "sim_results/"
 
-# Pull tuning results
-rsync -avz --progress \
-  --include='tune_results*.rds' \
-  --exclude='*' \
-  "${REMOTE}:${SRC}/sim_results/" \
-  "sim_results/"
-
 echo ""
 echo "=== rsync complete ==="
 echo ""
