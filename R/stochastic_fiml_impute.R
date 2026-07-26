@@ -56,7 +56,7 @@ stochastic_fiml_impute <- function(data, fit) {
     if (length(obs_idx) == 0L) {
       x[i, mis_idx] <- tryCatch(
         MASS::mvrnorm(n = 1L, mu = mu_all[mis_idx],
-                      Sigma = Sigma_all[mis_idx, mis_idx, drop = FALSE]),
+                      Sigma = as.matrix(Sigma_all[mis_idx, mis_idx, drop = FALSE])),
         error = function(e) mu_all[mis_idx]
       )
       next
@@ -64,9 +64,9 @@ stochastic_fiml_impute <- function(data, fit) {
 
     mu_o  <- mu_all[obs_idx]
     mu_m  <- mu_all[mis_idx]
-    S_oo  <- Sigma_all[obs_idx, obs_idx, drop = FALSE]
-    S_mm  <- Sigma_all[mis_idx, mis_idx, drop = FALSE]
-    S_mo  <- Sigma_all[mis_idx, obs_idx, drop = FALSE]
+    S_oo  <- as.matrix(Sigma_all[obs_idx, obs_idx, drop = FALSE])
+    S_mm  <- as.matrix(Sigma_all[mis_idx, mis_idx, drop = FALSE])
+    S_mo  <- as.matrix(Sigma_all[mis_idx, obs_idx, drop = FALSE])
     S_oo_inv <- tryCatch(solve(S_oo), error = function(e) {
       tryCatch(MASS::ginv(S_oo), error = function(e2) {
         solve(S_oo + diag(1e-8, nrow(S_oo)))
