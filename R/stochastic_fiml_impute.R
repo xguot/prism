@@ -36,7 +36,7 @@ stochastic_fiml_impute <- function(data, fit) {
   }
 
   vars <- lavaan::lavNames(fit, "ov")
-  implied <- lavaan::lavTech(fit, "implied")
+  implied <- lavaan::lavInspect(fit, "implied")
   mu_all <- as.vector(implied$mean)
   Sigma_all <- as.matrix(implied$cov)
   p <- length(vars)

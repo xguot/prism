@@ -109,7 +109,7 @@ prism_mi <- function(data, fit, m = 20, initial_imputation = NULL,
       )
     )
 
-    sigma_i <- lavaan::lavTech(fit_i, "implied")$cov
+    sigma_i <- as.matrix(lavaan::fitted(fit_i)$cov)
     colnames(sigma_i) <- time_cols
     rownames(sigma_i) <- time_cols
 
