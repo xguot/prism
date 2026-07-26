@@ -16,24 +16,30 @@ hr <- function(label) {
   cat(strrep("=", 90), "\n\n", sep = "")
 }
 
-compute_metrics <- function(results, true_slope = 1.0) {
-  # Filter for converged iterations (models that produced valid estimates)
-  valid <- results %>%
-    filter(converged == 1, is.finite(s_var), is.finite(s_se))
+compute_metrics <- function(results, param, true_val) {
+  ec <- est_cols[param]
+  sc <- se_cols[param]
+  has_se <- sc %in% names(results)
 
-  valid %>%
+  valid <- results %>% filter(converged == 1, is.finite(.data[[ec]]))
+  if (has_se) valid <- valid %>% filter(is.finite(.data[[sc]]))
+
+  out <- valid %>%
     group_by(method) %>%
     summarise(
-      n_converged    = n(),
-      mean_estimate  = mean(s_var, na.rm = TRUE),
-      empirical_se   = sd(s_var, na.rm = TRUE),
-      avg_model_se   = mean(s_se, na.rm = TRUE),
-      .groups        = "drop"
+      n_converged   = n(),
+      mean_estimate = mean(.data[[ec]], na.rm = TRUE),
+      empirical_se  = sd(.data[[ec]], na.rm = TRUE),
+      avg_model_se  = if (has_se) mean(.data[[sc]], na.rm = TRUE) else NA_real_,
+      .groups       = "drop"
     ) %>%
     mutate(
-      bias     = mean_estimate - true_slope,
-      se_ratio = avg_model_se / empirical_se
+      bias     = mean_estimate - true_val,
+      se_ratio = if (has_se) avg_model_se / empirical_se else NA_real_,
+      param    = param
     )
+
+  out
 }
 beta_true   <- c(psi_L = 1, psi_S = 1, psi_LS = 0, beta_L = 6, beta_S = 2)
 param_names <- names(beta_true)
@@ -54,6 +60,10 @@ est_cols <- c(
   psi_L  = "est_var_L",  psi_S  = "est_var_S", psi_LS = "est_cov_LS",
   beta_L = "est_L",       beta_S = "est_S"
 )
+se_cols <- c(
+  psi_L  = "se_var_L",  psi_S  = "se_var_S", psi_LS = "se_cov_LS",
+  beta_L = "se_L",       beta_S = "se_S"
+)
 
 all_params <- do.call(rbind, lapply(param_names, function(pn) {
   tv <- beta_true[pn]
@@ -69,12 +79,15 @@ all_params <- do.call(rbind, lapply(param_names, function(pn) {
 }))
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TABLE 0 — Convergence Rate, Empirical SE, and SE Ratio (psi_S)
+# TABLE 0 — Convergence, Empirical SE, Model SE, SE Ratio (all parameters)
 # ══════════════════════════════════════════════════════════════════════════════
-hr("TABLE 0 — Slope Variance: Convergence, Empirical SE, Model SE, SE Ratio")
+hr("TABLE 0 — Convergence, Empirical SE, Model SE, SE Ratio (all parameters)")
 
-se_metrics <- compute_metrics(prod)
-print(se_metrics, row.names = FALSE)
+for (pn in param_names) {
+  cat(sprintf("\n--- %s (truth = %.0f) ---\n", pn, beta_true[pn]))
+  sm <- compute_metrics(prod, pn, beta_true[pn])
+  print(as.data.frame(sm), row.names = FALSE)
+}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TABLE 1 — Frobenius Distance (primary metric)

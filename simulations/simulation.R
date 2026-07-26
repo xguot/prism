@@ -179,6 +179,7 @@ run_iteration <- function(sim_id, params) {
 
   make_row <- function(method, f_dist, s_var, s_se, time_sec,
                        beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA,
+                       se_L = NA, se_S = NA, se_var_L = NA, se_var_S = NA, se_cov_LS = NA,
                        pipeline_time = time_sec) {
     data.frame(
       sim_id = sim_id, N = params$n, miss = params$miss,
@@ -189,9 +190,12 @@ run_iteration <- function(sim_id, params) {
       s_var     = s_var,
       s_var_bias = rel_bias(s_var, v_s),
       s_se      = s_se,
-      converged = as.integer(!is.na(s_var) & is.finite(s_var)),
+      converged = as.integer(!is.na(s_var) & is.finite(s_var) &
+                             !is.na(beta_L) & is.finite(beta_L)),
       est_L     = beta_L,   est_S     = beta_S,
       est_var_L = psi_L,    est_var_S = psi_S,    est_cov_LS = psi_LS,
+      se_L      = se_L,     se_S      = se_S,
+      se_var_L  = se_var_L, se_var_S  = se_var_S, se_cov_LS = se_cov_LS,
       bias_L    = rel_bias(beta_L, mu_i),
       bias_S    = rel_bias(beta_S, mu_s),
       bias_var_L  = rel_bias(psi_L,  v_i),
@@ -228,7 +232,10 @@ run_iteration <- function(sim_id, params) {
   res_list[[1]] <- make_row("FIML", d_fiml, s_var_f, s_se_f, unname(time_fiml),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
-                            psi_LS = gp["psi_LS"])
+                            psi_LS = gp["psi_LS"],
+                            se_L = gs["beta_L"], se_S = gs["beta_S"],
+                            se_var_L = gs["psi_L"], se_var_S = gs["psi_S"],
+                            se_cov_LS = gs["psi_LS"])
 
   # ── FIML + lavPredict: conditional-expectation completed data ─────────────
   # lavPredict(type="ov") gives the conditional expectation of each missing
@@ -327,7 +334,10 @@ run_iteration <- function(sim_id, params) {
   res_list[[4]] <- make_row("MICE", d_m, s_var_m, s_se_m, unname(time_mice),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
-                            psi_LS = gp["psi_LS"])
+                            psi_LS = gp["psi_LS"],
+                            se_L = gps["beta_L"], se_S = gps["beta_S"],
+                            se_var_L = gps["psi_L"], se_var_S = gps["psi_S"],
+                            se_cov_LS = gps["psi_LS"])
 
   # ── missForest Baseline ───────────────────────────────────────────────────
   time_mf <- system.time({
@@ -433,6 +443,9 @@ run_iteration <- function(sim_id, params) {
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"],
+                            se_L = gps["beta_L"], se_S = gps["beta_S"],
+                            se_var_L = gps["psi_L"], se_var_S = gps["psi_S"],
+                            se_cov_LS = gps["psi_LS"],
                             pipeline_time = unname(time_mf) + unname(time_smi))
 
   rm(df_true, df_miss, imp_sr, imp_mice_list, imp_mf, imp_mr, imp_sf, imp_fp, imp_smi_list)
