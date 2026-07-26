@@ -73,7 +73,15 @@ prism_mi <- function(data, fit, m = 20, initial_imputation = NULL,
          "The model may not be identified.", call. = FALSE)
   }
 
-  draws <- MASS::mvrnorm(n = m, mu = theta_hat, Sigma = acov)
+  draws <- tryCatch(
+    MASS::mvrnorm(n = m, mu = theta_hat, Sigma = acov),
+    error = function(e) {
+      # Fall back to perturbing each parameter independently
+      matrix(rnorm(m * length(theta_hat), mean = theta_hat,
+                   sd = sqrt(pmax(diag(acov), 1e-8))),
+             nrow = m, byrow = TRUE)
+    }
+  )
 
   pt <- lavaan::parTable(fit)
   free_idx <- which(pt$free > 0L)
