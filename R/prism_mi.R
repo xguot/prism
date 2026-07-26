@@ -66,7 +66,7 @@ prism_mi <- function(data, fit, m = 20, initial_imputation = NULL,
   }
 
   theta_hat <- lavaan::coef(fit)
-  acov <- lavaan::vcov(fit)
+  acov <- as.matrix(lavaan::vcov(fit))
 
   if (anyNA(theta_hat) || anyNA(acov)) {
     stop("Parameter estimates or asymptotic covariance matrix contain NAs. ",
