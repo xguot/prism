@@ -219,6 +219,7 @@ run_iteration <- function(sim_id, params) {
                          error = function(e) NULL)
     s_var_f <- NA; s_se_f <- NA; d_fiml <- NA
     gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
+    gs <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
     if (!is.null(fit_fiml)) {
       pt <- parameterEstimates(fit_fiml)
       row <- pt[pt$lhs == "s" & pt$op == "~~" & pt$rhs == "s", ]
@@ -227,6 +228,7 @@ run_iteration <- function(sim_id, params) {
                               error = function(e) NULL)
       if (!is.null(implied_cov)) d_fiml <- frob_dist(implied_cov, true_cov)
       gp <- extract_gcm_params(fit_fiml)
+      gs <- extract_gcm_params(fit_fiml, "se")
     }
   })["elapsed"]
   res_list[[1]] <- make_row("FIML", d_fiml, s_var_f, s_se_f, unname(time_fiml),
@@ -303,6 +305,7 @@ run_iteration <- function(sim_id, params) {
 
     s_var_m <- NA; s_se_m <- NA; d_m <- NA
     gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
+    gps <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
 
     if (!is.null(imp_mice_list)) {
       # 1. Pool Covariance for Frobenius Distance
@@ -412,6 +415,7 @@ run_iteration <- function(sim_id, params) {
 
     s_var_smi <- NA; s_se_smi <- NA; d_smi <- NA
     gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
+    gps <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
 
     if (!is.null(imp_smi_list) && length(imp_smi_list) == m_prism) {
       cov_list <- lapply(imp_smi_list, function(x) stats::cov(x[, 1:t_points]))
