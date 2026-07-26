@@ -11,17 +11,21 @@ echo "=== rsync results ← Rivanna ==="
 echo "  Remote : ${REMOTE}:${SRC}"
 echo ""
 
-# Pull aggregated production results (if already combined)
-rsync -avz --progress \
-  "${REMOTE}:${SRC}/sim_results/prod_results.rds" \
-  "sim_results/"
+# Pull aggregated production results (if already combined remotely)
+if ssh -q "${REMOTE}" "test -f ${SRC}/sim_results/prod_results.rds"; then
+  rsync -avz --progress \
+    "${REMOTE}:${SRC}/sim_results/prod_results.rds" \
+    "sim_results/"
+else
+  echo "  (no aggregated prod_results.rds on remote — skipping)"
+fi
 
-# Pull per-task production files (if not yet aggregated)
+# Pull per-task production files
 rsync -avz --progress \
   --include='prod_results_*.rds' \
   --exclude='*' \
   "${REMOTE}:${SRC}/sim_results/" \
-  "sim_results/"
+  "sim_results/" || true
 
 echo ""
 echo "=== rsync complete ==="

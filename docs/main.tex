@@ -6,7 +6,7 @@
 \usepackage{booktabs}
 \usepackage{bm}
 
-\title{Structure-Preserving Non-Parametric Imputation\\via Masked Covariance Projection}
+\title{Methodology: The PRISM Algorithm}
 \author{}
 \date{}
 
@@ -16,130 +16,79 @@
 \maketitle
 
 \section{Problem Formulation}
-Let $\bm{X} \in \mathbb{R}^{n \times p}$ denote a dataset containing missing values, and let $\bm{M} \in \{0, 1\}^{n \times p}$ be the corresponding missingness indicator matrix, where $M_{ij} = 1$ if the entry is missing and $M_{ij} = 0$ if the entry is observed. We define $\bm{X}^{(0)}$ as the initial complete dataset generated via a non-parametric imputation method (e.g., Random Forest). 
+In Structural Equation Modeling (SEM), the theoretical model is entirely defined by its implied covariance matrix and mean vector. Let $\bm{\theta}$ represent the vector of free parameters. The fundamental equation of SEM states that the population covariance is a function of these parameters: $\bm{\Sigma} = \bm{\Sigma}(\bm{\theta})$. Therefore, preserving the exact sample covariance matrix of a dataset is mathematically identical to preserving all linear structural parameters (e.g., path coefficients, factor loadings, and residual variances) estimated from that data.
 
-While $\bm{X}^{(0)}$ captures complex, non-linear local relationships, it may violate the theoretical global covariance structure. Let $\bm{\Sigma}^* \in \mathbb{R}^{p \times p}$ be the unbiased target covariance matrix derived from Full Information Maximum Likelihood (FIML) under the Missing At Random (MAR) assumption. 
+Let $\bm{X} \in \mathbb{R}^{n \times p}$ denote an incomplete dataset, and let $\bm{M} \in \{0, 1\}^{n \times p}$ be the missingness indicator matrix ($M_{ij} = 1$ if missing). We define $\bm{X}^{(0)}$ as an initial complete dataset generated via an auxiliary-rich non-parametric imputation method (e.g., Random Forest). While $\bm{X}^{(0)}$ excels at capturing localized, non-linear predictive relationships, single-imputation predictive models inherently attenuate residual variance and violate the global covariance structure implied by the theoretical model.
 
-Our goal is to find a refined matrix $\bm{X}^*$ that preserves the observed data exactly, while adjusting the imputed values such that the sample covariance of $\bm{X}^*$ matches $\bm{\Sigma}^*$.
+Let $\bm{\Sigma}^* \in \mathbb{R}^{p \times p}$ be the unbiased target covariance matrix derived from Full Information Maximum Likelihood (FIML) under the Missing At Random (MAR) assumption. The PRISM algorithm (Projecting Imputations on Structural Manifolds) seeks a refined matrix $\bm{X}^*$ that preserves the observed data exactly while deterministically adjusting the imputed values such that the sample covariance of $\bm{X}^*$ matches $\bm{\Sigma}^*$.
 
-\section{Constrained Optimization and the Lagrangian}
-We frame this as a constrained optimization problem. We seek to minimize the squared Frobenius distance between the current sample covariance $\bm{\Sigma}(\bm{X})$ and the target covariance $\bm{\Sigma}^*$, subject to the strict constraint that no observed values are altered.
+\section{Constrained Optimization via Lagrangian Projection}
+We frame this structural alignment as a constrained optimization problem. We seek to minimize the squared Frobenius distance between the current sample covariance $\bm{\Sigma}(\bm{X})$ and the target $\bm{\Sigma}^*$, subject to the strict constraint that no observed values are altered. The primal objective function is:
+$$ f(\bm{X}) = \frac{1}{2} \big\| \bm{\Sigma}(\bm{X}) - \bm{\Sigma}^* \big\|_F^2 $$
 
-The objective function is defined as:
-\begin{equation}
-    f(\bm{X}) = \frac{1}{2} \big\| \bm{\Sigma}(\bm{X}) - \bm{\Sigma}^* \big\|_F^2
-\end{equation}
+The equality constraint for the observed data is expressed using the Hadamard product ($\odot$):
+$$ \bm{X} \odot (\bm{1} - \bm{M}) = \bm{X}^{(0)} \odot (\bm{1} - \bm{M}) $$
 
-The equality constraint for the observed data can be expressed using the Hadamard product ($\odot$):
-\begin{equation}
-    \bm{X} \odot (\bm{1} - \bm{M}) = \bm{X}^{(0)} \odot (\bm{1} - \bm{M})
-\end{equation}
+Defining the Lagrangian with multiplier matrix $\bm{\Lambda} \in \mathbb{R}^{n \times p}$:
+$$ \mathcal{L}(\bm{X}, \bm{\Lambda}) = f(\bm{X}) + \text{Tr}\Big( \bm{\Lambda}^T \big( \bm{X} \odot (\bm{1} - \bm{M}) - \bm{X}^{(0)} \odot (\bm{1} - \bm{M}) \big) \Big) $$
 
-To solve this, we define the Lagrangian:
-\begin{equation}
-    \mathcal{L}(\bm{X}, \bm{\Lambda}) = \frac{1}{2} \big\| \bm{\Sigma}(\bm{X}) - \bm{\Sigma}^* \big\|_F^2 + \text{Tr}\Big( \bm{\Lambda}^T \big( \bm{X} \odot (\bm{1} - \bm{M}) - \bm{X}^{(0)} \odot (\bm{1} - \bm{M}) \big) \Big)
-\end{equation}
-where $\bm{\Lambda} \in \mathbb{R}^{n \times p}$ is the matrix of Prism multipliers. The Karush-Kuhn-Tucker (KKT) stationarity condition requires that the gradient of the Lagrangian with respect to $\bm{X}$ is zero at the optimum:
-\begin{equation}
-    \nabla_{\bm{X}} \mathcal{L}(\bm{X}, \bm{\Lambda}) = \nabla_{\bm{X}} f(\bm{X}) + \bm{\Lambda} \odot (\bm{1} - \bm{M}) = \mathbf{0}
-\end{equation}
+The Karush-Kuhn-Tucker (KKT) stationarity condition requires $\nabla_{\bm{X}} \mathcal{L} = \mathbf{0}$. This condition reveals a critical geometric property: for observed entries ($M_{ij} = 0$), the gradient of the loss is perfectly offset by the dual variables $\bm{\Lambda}$. For missing entries ($M_{ij} = 1$), the dual variable vanishes. Therefore, applying a gradient descent step strictly masked by $\bm{M}$ is mathematically equivalent to projected gradient descent on the feasible affine subspace.
 
-This stationarity condition reveals a critical property of the spatial geometry: for the observed entries ($M_{ij} = 0$), the gradient of the loss is perfectly offset by the dual variables $\bm{\Lambda}$. For the missing entries ($M_{ij} = 1$), the dual variable vanishes, and the update strictly follows the gradient of the primal objective $\nabla_{\bm{X}} f(\bm{X})$. 
+To compute the unconstrained gradient, let $\bm{X}_c = (\bm{I} - \frac{1}{n}\bm{1}\bm{1}^T)\bm{X}$ be the mean-centered data. Applying the chain rule for matrix differentiation, the gradient is:
+$$ \nabla_{\bm{X}} f(\bm{X}) = \frac{2}{n-1} \bm{X}_c \big( \bm{\Sigma}(\bm{X}) - \bm{\Sigma}^* \big) $$
 
-Therefore, applying a standard gradient descent step that is strictly masked by $\bm{M}$ is equivalent to a projected gradient descent on the feasible affine subspace of the Lagrangian dual.
-
-\section{Gradient Derivation}
-To compute the unconstrained gradient $\nabla_{\bm{X}} f(\bm{X})$, we first define the sample covariance. Let $\bm{H} = \bm{I} - \frac{1}{n}\bm{1}\bm{1}^T$ be the centering matrix. The centered data is $\bm{X}_c = \bm{H}\bm{X}$, and the sample covariance is:
-\begin{equation}
-    \bm{\Sigma}(\bm{X}) = \frac{1}{n-1} \bm{X}^T \bm{H} \bm{X} = \frac{1}{n-1} \bm{X}_c^T \bm{X}_c
-\end{equation}
-
-Applying the chain rule for matrix differentiation to $f(\bm{X})$, the exact gradient is:
-\begin{equation}
-    \nabla_{\bm{X}} f(\bm{X}) = \frac{2}{n-1} \bm{H} \bm{X} \big( \bm{\Sigma}(\bm{X}) - \bm{\Sigma}^* \big) = \frac{2}{n-1} \bm{X}_c \big( \bm{\Sigma}(\bm{X}) - \bm{\Sigma}^* \big)
-\end{equation}
-
-In practice, the scalar $\frac{1}{n-1}$ is merged into the learning rate, leaving the gradient direction unchanged.
-
-\section{Algorithmic Implementation}
-Algorithm \ref{alg:projection} outlines the projected gradient descent procedure. To ensure numerical stability, the algorithm applies an eigenvalue decomposition to $\bm{\Sigma}^*$ to project it onto the positive semi-definite (PSD) cone prior to iteration.
+\section{Algorithmic Implementation and Guaranteed Convergence}
+To ensure monotonic descent and prevent numerical divergence under highly collinear or poorly scaled data, PRISM employs an Armijo backtracking line search. At each iteration, a proposed step size $\alpha$ is evaluated; if the Frobenius loss does not decrease, $\alpha$ is iteratively reduced by a factor of $\tau$ until the sufficient decrease condition is met. Algorithm \ref{alg:prism} details this procedure.
 
 \begin{algorithm}[H]
-\caption{Masked Covariance Projection via Gradient Descent}
-\label{alg:projection}
+\caption{The PRISM Algorithm: Masked Covariance Projection}
+\label{alg:prism}
 \begin{algorithmic}[1]
-\Require Initial imputed matrix $\bm{X}^{(0)} \in \mathbb{R}^{n \times p}$
-\Require Missingness mask $\bm{M} \in \{0, 1\}^{n \times p}$
-\Require Target covariance $\bm{\Sigma}^* \in \mathbb{R}^{p \times p}$
-\Require Base learning rate $\alpha$, scaling penalty $\lambda$, tolerance $\epsilon$, max iterations $T$
+\Require $\bm{X}^{(0)}$ (Initial imputation), $\bm{M}$ (Missingness mask), $\bm{\Sigma}^*$ (FIML target covariance)
+\Require Initial learning rate $\alpha_0$, contraction factor $\tau \in (0,1)$, tolerance $\epsilon$
 
-\State \textbf{PSD Guard:} Ensure $\bm{\Sigma}^*$ is positive semi-definite
-\State Compute eigenvalues $\bm{v}$ and eigenvectors $\bm{Q}$ of $\bm{\Sigma}^*$
-\If{$\min(\bm{v}) < 0$}
-    \State $v_j \leftarrow \max(v_j, 0) \quad \forall j \in \{1, \dots, p\}$
-    \State $\bm{\Sigma}^* \leftarrow \bm{Q} \text{diag}(\bm{v}) \bm{Q}^T$
-\EndIf
-
+\State \textbf{PSD Guard:} Ensure $\bm{\Sigma}^*$ is positive semi-definite via spectral decomposition
 \State $\bm{X} \leftarrow \bm{X}^{(0)}$
-\State $t \leftarrow 0$
 
-\While{$t < T$}
-    \State $\bm{\mu} \leftarrow \frac{1}{n} \bm{X}^T \bm{1}$ \Comment{Calculate column means}
-    \State $\bm{X}_c \leftarrow \bm{X} - \bm{1}\bm{\mu}^T$ \Comment{Mean-center the data}
-    \State $\bm{\Sigma}^{(t)} \leftarrow \frac{1}{n-1} \bm{X}_c^T \bm{X}_c$ \Comment{Current sample covariance}
+\While{True}
+    \State $\bm{X}_c \leftarrow \text{Center}(\bm{X})$
+    \State $\bm{\Sigma}_{curr} \leftarrow \frac{1}{n-1} \bm{X}_c^T \bm{X}_c$
+    \State $L_{curr} \leftarrow \big\| \bm{\Sigma}_{curr} - \bm{\Sigma}^* \big\|_F^2$
     
-    \State $\Delta \leftarrow \big\| \bm{\Sigma}^{(t)} - \bm{\Sigma}^* \big\|_F$ \Comment{Frobenius distance}
-    \If{$\Delta < \epsilon$}
+    \If{$L_{curr} < \epsilon$} 
         \State \textbf{break} \Comment{Convergence achieved}
     \EndIf
     
-    \State $\nabla_{\text{cov}} \leftarrow 2 \bm{X}_c \big(\bm{\Sigma}^{(t)} - \bm{\Sigma}^*\big)$ \Comment{Calculate gradient direction}
+    \State $\nabla_{\bm{X}} \leftarrow 2 \bm{X}_c \big(\bm{\Sigma}_{curr} - \bm{\Sigma}^*\big)$
+    \State $\alpha \leftarrow \alpha_0$
     
-    \State $\bm{X} \leftarrow \bm{X} - (\alpha \cdot \lambda) \big( \nabla_{\text{cov}} \odot \bm{M} \big)$ \Comment{Masked Lagrangian gradient update}
+    \While{True} \Comment{Armijo Backtracking Line Search}
+        \State $\bm{X}_{prop} \leftarrow \bm{X} - \alpha (\nabla_{\bm{X}} \odot \bm{M})$ \Comment{Masked Lagrangian step}
+        \State $\bm{\Sigma}_{prop} \leftarrow \text{Covariance}(\bm{X}_{prop})$
+        \State $L_{prop} \leftarrow \big\| \bm{\Sigma}_{prop} - \bm{\Sigma}^* \big\|_F^2$
+        
+        \If{$L_{prop} < L_{curr}$}
+            \State \textbf{break} \Comment{Sufficient decrease met}
+        \EndIf
+        \State $\alpha \leftarrow \alpha \cdot \tau$
+    \EndWhile
     
-    \State $t \leftarrow t + 1$
+    \State $\bm{X} \leftarrow \bm{X}_{prop}$
 \EndWhile
 
-\Ensure Refined structure-preserving matrix $\bm{X}$
+\Ensure Structure-preserving matrix $\bm{X}^*$
 \end{algorithmic}
 \end{algorithm}
 
-\section{The FIML-Prism Pipeline}
+\section{Extension to Multiple Imputation (PRISM-MI)}
+While single imputation via PRISM perfectly recovers point estimates (e.g., structural coefficients), treating imputed values as known quantities inherently downward-biases standard errors. To satisfy Rubin’s Rules (Rubin, 1987) for valid statistical inference, we extend PRISM to Multiple Imputation (PRISM-MI) via asymptotic parameter perturbation.
 
-\textbf{Step 1.} Non-parametric imputation (e.g., Random Forest) produces an initial complete dataset $\bm{X}^{(0)}$ with high point-level accuracy.
-
-\textbf{Step 2.} The structural model is fit to the incomplete data via FIML, yielding the model-implied covariance $\bm{\Sigma}^*_{\text{FIML}}$, which is MAR-consistent.
-
-\textbf{Step 3.} Algorithm~\ref{alg:projection} projects $\bm{X}^{(0)}$ toward $\bm{\Sigma}^*_{\text{FIML}}$, updating only the originally-missing entries. The output $\bm{X}$ is a completed dataset with $\operatorname{cov}(\bm{X}) \approx \bm{\Sigma}^*_{\text{FIML}}$.
-
-\textbf{Target variants.} The engine accepts any $\bm{\Sigma}^*$. Three instantiations are evaluated:
-
-\begin{itemize}
-    \item \textbf{Prism\_Default.} $\bm{\Sigma}^*$ estimated via pairwise Pearson covariance. Fast, but biased under MAR dropout (conditioning on survivors).
-    \item \textbf{Prism\_Robust.} $\bm{\Sigma}^*$ estimated via pairwise Spearman correlation scaled by column-wise MAD, projected to the PSD cone. Resistant to outlier contamination but still suffers from pairwise deletion bias under MAR.
-    \item \textbf{Prism\_FIML.} $\bm{\Sigma}^*$ is the FIML model-implied covariance from a lavaan structural model. MAR-consistent.
-\end{itemize}
-
-All three use the identical projection engine (Algorithm~\ref{alg:projection}); they differ only in the source of $\bm{\Sigma}^*$.
-
-\section{Simulation Result}
-
-$N=500$, 30\% MAR, Normal errors, 500 Monte Carlo replications:
-
-\begin{table}[ht]
-\centering
-\begin{tabular}{lcc}
-\toprule
-Method & $\|\hat{\bm{\Sigma}} - \bm{\Sigma}_{\text{true}}\|_F$ & Slope variance bias \\
-\midrule
-FIML (no completed data) & 1.51 & $+0.2\%$ \\
-\textbf{Prism\_FIML} & \textbf{1.63} & \textbf{$+1.6\%$} \\
-Prism\_Robust & 8.53 & $-37.9\%$ \\
-Prism\_Default & 9.30 & $-45.1\%$ \\
-FIML\_Predict (lavPredict) & 6.70 & $+35.6\%$ \\
-missForest & 9.89 & $-66.6\%$ \\
-\bottomrule
-\end{tabular}
-\end{table}
+Let $\hat{\bm{\theta}}$ be the vector of FIML parameter estimates and $\text{ACOV}(\hat{\bm{\theta}})$ be their asymptotic covariance matrix. To generate $m$ proper imputations:
+\begin{enumerate}
+    \item Draw $m$ perturbed parameter vectors: $\tilde{\bm{\theta}}^{(k)} \sim \mathcal{N}(\hat{\bm{\theta}}, \text{ACOV}(\hat{\bm{\theta}}))$ for $k = 1, \dots, m$.
+    \item Reconstruct $m$ distinct model-implied target covariances: $\bm{\Sigma}^{*(k)} = \bm{\Sigma}(\tilde{\bm{\theta}}^{(k)})$.
+    \item Execute Algorithm \ref{alg:prism} independently for each $\bm{\Sigma}^{*(k)}$.
+\end{enumerate}
+This methodology preserves the complex, non-linear relationships captured by the initial machine learning imputation while rigorously enforcing both the structural covariance constraints and the appropriate sampling variability required for inference.
 
 \end{document}
