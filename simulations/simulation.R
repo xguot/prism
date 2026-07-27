@@ -263,7 +263,7 @@ run_iteration <- function(sim_id, params) {
       }
     }
   })["elapsed"]
-  res_list[[2]] <- make_row("FIML_Predict", d_fp, s_var_fp, s_se_fp,
+  res_list[[2]] <- make_row("FIML_lavPredict", d_fp, s_var_fp, s_se_fp,
                             unname(time_fp),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
@@ -289,7 +289,7 @@ run_iteration <- function(sim_id, params) {
       }
     }
   })["elapsed"]
-  res_list[[3]] <- make_row("FIML_Stochastic", d_sr, s_var_sr, s_se_sr,
+  res_list[[3]] <- make_row("FIML_stochastic", d_sr, s_var_sr, s_se_sr,
                             unname(time_sr),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
@@ -334,7 +334,7 @@ run_iteration <- function(sim_id, params) {
       }
     }
   })["elapsed"]
-  res_list[[4]] <- make_row("MICE", d_m, s_var_m, s_se_m, unname(time_mice),
+  res_list[[4]] <- make_row("MICE_norm", d_m, s_var_m, s_se_m, unname(time_mice),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"],
@@ -398,7 +398,7 @@ run_iteration <- function(sim_id, params) {
       if (!is.null(fit_sf)) gp <- extract_gcm_params(fit_sf)
     }
   })["elapsed"]
-  res_list[[7]] <- make_row("prism_fiml", d_sf, s_var_sf, s_se_sf,
+  res_list[[7]] <- make_row("PRISM", d_sf, s_var_sf, s_se_sf,
                             unname(time_sf),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
@@ -442,7 +442,7 @@ run_iteration <- function(sim_id, params) {
       }
     }
   })["elapsed"]
-  res_list[[8]] <- make_row("prism_mi", d_smi, s_var_smi, s_se_smi,
+  res_list[[8]] <- make_row("PRISM_MI", d_smi, s_var_smi, s_se_smi,
                             unname(time_smi),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],

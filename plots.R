@@ -50,27 +50,27 @@ theme_mda <- function(legend_pos = "bottom") {
 # Shared scales — mda color palette for baselines, red for prism
 # ══════════════════════════════════════════════════════════════════════════════
 method_levels <- c(
-  "FIML_Predict", "MICE", "missForest", "missRanger",
-  "prism_fiml", "prism_mi"
+  "FIML_lavPredict", "MICE_norm", "missForest", "missRanger",
+  "PRISM", "PRISM_MI"
 )
 
 method_colors <- c(
-  "FIML_Predict"   = "#00BFC4",   # teal — naive FIML completed
-  "MICE"           = "#4DAF4A",   # green — multiple imputation
+  "FIML_lavPredict"   = "#00BFC4",   # teal — naive FIML completed
+  "MICE_norm"           = "#4DAF4A",   # green — multiple imputation
   "missForest"     = "#984EA3",   # purple — ML single imputation
   "missRanger"     = "#FF7F00",   # orange — fast ML baseline
-  "prism_fiml"     = "#E41A1C",   # red — primary proposed method
-  "prism_mi"       = "#B30000"    # dark red — proper MI proposed method
+  "PRISM"     = "#E41A1C",   # red — primary proposed method
+  "PRISM_MI"       = "#B30000"    # dark red — proper MI proposed method
 )
 
 # Solid for proposed methods, dashed/dotted for baselines
 method_linetypes <- c(
-  "FIML_Predict"   = "dotted",
-  "MICE"           = "dotdash",
+  "FIML_lavPredict"   = "dotted",
+  "MICE_norm"           = "dotdash",
   "missForest"     = "longdash",
   "missRanger"     = "dotted",
-  "prism_fiml"     = "solid",
-  "prism_mi"       = "solid"
+  "PRISM"     = "solid",
+  "PRISM_MI"       = "solid"
 )
 
 scale_method_aes <- list(
