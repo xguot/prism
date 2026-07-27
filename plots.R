@@ -91,14 +91,14 @@ miss_labels  <- c("5%", "10%", "15%", "30%")
 N_levels     <- c("N = 100", "N = 200", "N = 500",
                   "N = 1k", "N = 5k", "N = 10k")
 
-beta_true    <- c(psi_L = 1, psi_S = 1, psi_LS = 0, beta_L = 6, beta_S = 2)
+beta_true    <- c(var_intercept = 1, var_slope = 1, cov_intercept_slope = 0, mean_intercept = 6, mean_slope = 2)
 param_names  <- names(beta_true)
-param_labels_tex <- c(
-  psi_L  = "sigma[L]^2",
-  psi_S  = "sigma[S]^2",
-  psi_LS = "sigma[LS]",
-  beta_L = "beta[L]",
-  beta_S = "beta[S]"
+param_labels <- c(
+  var_intercept  = "Variance (Intercept)",
+  var_slope  = "Variance (Slope)",
+  cov_intercept_slope = "Covariance (Int, Slope)",
+  mean_intercept = "Mean (Intercept)",
+  mean_slope = "Mean (Slope)"
 )
 
 dir.create("figs", showWarnings = FALSE, recursive = TRUE)
@@ -134,8 +134,8 @@ agg <- prod %>%
 
 # Per-parameter long table (for heatmap)
 est_cols <- c(
-  psi_L  = "est_var_L",  psi_S  = "est_var_S", psi_LS = "est_cov_LS",
-  beta_L = "est_L",       beta_S = "est_S"
+  var_intercept  = "est_var_L",  var_slope  = "est_var_S", cov_intercept_slope = "est_cov_LS",
+  mean_intercept = "est_L",       mean_slope = "est_S"
 )
 
 all_params <- do.call(rbind, lapply(param_names, function(pn) {
@@ -288,7 +288,7 @@ heatmap_data <- all_params %>%
   summarise(RelBias = mean(relbias, na.rm = TRUE), .groups = "drop") %>%
   mutate(
     param_label = factor(param, levels = param_names,
-                         labels = param_labels_tex)
+                         labels = param_labels)
   )
 
 p3 <- ggplot(heatmap_data,

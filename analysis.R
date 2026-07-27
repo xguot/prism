@@ -41,14 +41,14 @@ compute_metrics <- function(results, param, true_val) {
 
   out
 }
-beta_true   <- c(psi_L = 1, psi_S = 1, psi_LS = 0, beta_L = 6, beta_S = 2)
+beta_true   <- c(var_intercept = 1, var_slope = 1, cov_intercept_slope = 0, mean_intercept = 6, mean_slope = 2)
 param_names <- names(beta_true)
 param_labels <- c(
-  psi_L  = expression(psi[L] ~ "(Var intercept)"),
-  psi_S  = expression(psi[S] ~ "(Var slope)"),
-  psi_LS = expression(psi[LS] ~ "(Covariance)"),
-  beta_L = expression(beta[L] ~ "(Intercept)"),
-  beta_S = expression(beta[S] ~ "(Slope)")
+  var_intercept  = "Variance (Intercept)",
+  var_slope  = "Variance (Slope)",
+  cov_intercept_slope = "Covariance (Int, Slope)",
+  mean_intercept = "Mean (Intercept)",
+  mean_slope = "Mean (Slope)"
 )
 
 cat(sprintf("Production data: %d rows, %d methods\n",
@@ -57,12 +57,12 @@ cat(sprintf("Production data: %d rows, %d methods\n",
 # ── Build per-parameter long table (all methods, all conditions) ─────────────
 # Map production column names to GCM parameter names
 est_cols <- c(
-  psi_L  = "est_var_L",  psi_S  = "est_var_S", psi_LS = "est_cov_LS",
-  beta_L = "est_L",       beta_S = "est_S"
+  var_intercept  = "est_var_L",  var_slope  = "est_var_S", cov_intercept_slope = "est_cov_LS",
+  mean_intercept = "est_L",       mean_slope = "est_S"
 )
 se_cols <- c(
-  psi_L  = "se_var_L",  psi_S  = "se_var_S", psi_LS = "se_cov_LS",
-  beta_L = "se_L",       beta_S = "se_S"
+  var_intercept  = "se_var_L",  var_slope  = "se_var_S", cov_intercept_slope = "se_cov_LS",
+  mean_intercept = "se_L",       mean_slope = "se_S"
 )
 
 all_params <- do.call(rbind, lapply(param_names, function(pn) {
