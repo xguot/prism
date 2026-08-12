@@ -3,7 +3,7 @@ lib_path <- "~/R/rivanna-lib"
 dir.create(lib_path, recursive = TRUE, showWarnings = FALSE)
 .libPaths(c(lib_path, .libPaths()))
 
-dependencies <- c("missForest", "missRanger", "mice", "ranger",
+dependencies <- c("missForest", "mice",
                   "lavaan", "Rcpp", "RcppArmadillo", "MASS")
 
 for (pkg in dependencies) {
