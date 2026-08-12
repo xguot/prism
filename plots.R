@@ -26,18 +26,16 @@ theme_mda <- function(legend_pos = "bottom") {
 
 # Method levels and aesthetics
 method_levels <- c("FIML", "FIML_lavPredict", "MICE",
-                   "missForest", "missRanger",
-                   "PRISM", "PRISM_MI")
+                   "missForest", "PRISM", "PRISM_MI")
 method_colors <- c(
   "FIML"             = "#000000", "FIML_lavPredict"  = "#999999",
   "MICE"             = "#E69F00",
-  "missForest"       = "#009E73", "missRanger"       = "#0072B2",
+  "missForest"       = "#009E73",
   "PRISM"            = "#D55E00", "PRISM_MI"         = "#CC79A7"
 )
 method_shapes <- c(
   "FIML" = 17, "FIML_lavPredict" = 15, "MICE" = 16,
-  "missForest" = 8, "missRanger" = 4,
-  "PRISM" = 19, "PRISM_MI" = 1
+  "missForest" = 8, "PRISM" = 19, "PRISM_MI" = 1
 )
 scale_method_aes <- list(
   scale_color_manual(values = method_colors, breaks = method_levels),
@@ -57,7 +55,7 @@ prod$N_label <- factor(paste0("N = ", prod$N),
                        levels = paste0("N = ", c(100, 200, 500, 1000, 5000, 10000)))
 
 # Drop methods kept only in supplementary material
-keep_methods <- c("FIML", "FIML_lavPredict", "MICE", "missForest", "missRanger", "PRISM", "PRISM_MI")
+keep_methods <- c("FIML", "FIML_lavPredict", "MICE", "missForest", "PRISM", "PRISM_MI")
 
 # Aggregate Frobenius
 frob_agg <- prod %>%

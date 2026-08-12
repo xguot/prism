@@ -8,7 +8,6 @@ library(lavaan)
 library(mice)
 library(ranger)
 library(missForest)
-library(missRanger)
 
 # Neutralize multi-threaded BLAS to prevent resource contention
 Sys.setenv(OMP_NUM_THREADS = "1", MKL_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1")
@@ -335,25 +334,6 @@ run_iteration <- function(sim_id, params) {
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"])
 
-  # ── missRanger Baseline ───────────────────────────────────────────────────
-  time_mr <- system.time({
-    imp_mr <- tryCatch(missRanger::missRanger(df_miss, verbose = 0),
-                       error = function(e) NULL)
-    s_var_mr <- NA; s_se_mr <- NA; d_mr <- NA
-    gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
-    if (!is.null(imp_mr)) {
-      d_mr <- frob_dist(stats::cov(imp_mr[, 1:t_points]), true_cov)
-      sv <- extract_slope_var(imp_mr, gcm_mod)
-      s_var_mr <- sv["s_var"]; s_se_mr <- sv["s_se"]
-      fit_mr <- tryCatch(growth(gcm_mod, data = imp_mr), error = function(e) NULL)
-      if (!is.null(fit_mr)) gp <- extract_gcm_params(fit_mr)
-    }
-  })["elapsed"]
-  res_list[[5]] <- make_row("missRanger", d_mr, s_var_mr, s_se_mr, unname(time_mr),
-                            beta_L = gp["beta_L"], beta_S = gp["beta_S"],
-                            psi_L = gp["psi_L"], psi_S = gp["psi_S"],
-                            psi_LS = gp["psi_LS"])
-
   # ── prism_fiml: FIML model-implied Σ target ───────────────────────────
   # Uses prism_fiml() which fits a lavaan growth model with FIML to extract
   # the model-implied covariance as the structural target, then projects the
@@ -372,7 +352,7 @@ run_iteration <- function(sim_id, params) {
       if (!is.null(fit_sf)) gp <- extract_gcm_params(fit_sf)
     }
   })["elapsed"]
-  res_list[[6]] <- make_row("PRISM", d_sf, s_var_sf, s_se_sf,
+  res_list[[5]] <- make_row("PRISM", d_sf, s_var_sf, s_se_sf,
                             unname(time_sf),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
@@ -416,7 +396,7 @@ run_iteration <- function(sim_id, params) {
       }
     }
   })["elapsed"]
-  res_list[[7]] <- make_row("PRISM_MI", d_smi, s_var_smi, s_se_smi,
+  res_list[[6]] <- make_row("PRISM_MI", d_smi, s_var_smi, s_se_smi,
                             unname(time_smi),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
@@ -426,7 +406,7 @@ run_iteration <- function(sim_id, params) {
                             se_cov_LS = gps["psi_LS"],
                             pipeline_time = unname(time_mf) + unname(time_smi))
 
-  rm(df_true, df_miss, imp_mice_rf_list, imp_mf, imp_mr, imp_sf, imp_fp, imp_smi_list)
+  rm(df_true, df_miss, imp_mice_rf_list, imp_mf, imp_sf, imp_fp, imp_smi_list)
   do.call(rbind, res_list)
 }
 
@@ -445,8 +425,8 @@ if (!is.na(array_id) && array_id >= 1 && array_id <= total_conditions) {
 }
 
 # ── Execution ────────────────────────────────────────────────────────────────
-cat(sprintf("Grid: %d conditions × %d reps × 7 methods = %d total rows\n",
-            total_conditions, n_sims, total_conditions * n_sims * 7))
+cat(sprintf("Grid: %d conditions × %d reps × 6 methods = %d total rows\n",
+            total_conditions, n_sims, total_conditions * n_sims * 6))
 cat(sprintf("Parallel cores: %d\n", num_cores))
 cat(sprintf("Output: %s\n\n", output_file))
 
