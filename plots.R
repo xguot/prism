@@ -73,6 +73,8 @@ param_files <- c(psi_L  = "Var_Intercept", psi_S = "Var_Slope",
                  psi_LS = "Covariance", beta_L = "Intercept", beta_S = "Slope")
 est_cols <- c(psi_L = "est_var_L", psi_S = "est_var_S", psi_LS = "est_cov_LS",
               beta_L = "est_L", beta_S = "est_S")
+se_cols <- c(psi_L = "se_var_L", psi_S = "se_var_S", psi_LS = "se_cov_LS",
+             beta_L = "se_L", beta_S = "se_S")
 
 bias_agg <- do.call(rbind, lapply(param_names, function(pn) {
   tv <- beta_true[pn]; ec <- est_cols[pn]
@@ -85,6 +87,22 @@ bias_agg <- do.call(rbind, lapply(param_names, function(pn) {
   group_by(N, N_label, miss, dist, mech, method, param) %>%
   summarise(arb_mean = mean(abs(rel_bias), na.rm = TRUE),
             arb_sd   = sd(abs(rel_bias), na.rm = TRUE), .groups = "drop")
+
+# Aggregate SE ratio
+se_ratio_agg <- do.call(rbind, lapply(param_names, function(pn) {
+  sc <- se_cols[pn]
+  if (!sc %in% names(prod)) return(NULL)
+  prod %>%
+    filter(is.finite(.data[[sc]]), method %in% keep_methods) %>%
+    group_by(N, N_label, miss, dist, mech, method) %>%
+    summarise(
+      empirical_se = sd(.data[[est_cols[pn]]], na.rm = TRUE),
+      avg_model_se = mean(.data[[sc]], na.rm = TRUE),
+      se_ratio     = avg_model_se / empirical_se,
+      .groups      = "drop"
+    ) %>%
+    mutate(param = pn)
+}))
 
 dir.create("figs", showWarnings = FALSE)
 
@@ -136,4 +154,25 @@ for (pn in param_names) {
   ggsave(sprintf("figs/bias_mar_%s.pdf", param_files[pn]), p, width = 30, height = 20, units = "cm")
 }
 
-cat(sprintf("\nDone. %d figures saved to figs/\n", 2 + length(param_names)))
+# FIGURES 8-12 — SE Ratio per parameter (MAR)
+total_figs <- 2 + 2 * length(param_names)
+
+if (!is.null(se_ratio_agg)) {
+  for (pn in param_names) {
+    cat(sprintf("Plotting SE Ratio: %s...\n", pn))
+    fig <- se_ratio_agg %>% filter(mech == "MAR", param == pn)
+    p <- ggplot(fig, aes(x = miss, y = se_ratio, group = method)) +
+      geom_hline(yintercept = 1, linetype = "dashed", color = "grey50", linewidth = 0.4) +
+      geom_line(aes(color = method), linewidth = 0.5) +
+      geom_point(aes(color = method, shape = method), size = 1.0) +
+      scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
+      scale_method_aes +
+      facet_grid(dist ~ N_label, scales = "free_y") +
+      labs(x = "Missingness Rate", y = "SE Ratio (Model SE / Empirical SE)",
+           title = paste0("SE Ratio: ", param_labels[pn])) +
+      theme_mda()
+    ggsave(sprintf("figs/se_ratio_%s.pdf", param_files[pn]), p, width = 30, height = 20, units = "cm")
+  }
+}
+
+cat(sprintf("\nDone. %d figures saved to figs/\n", total_figs))
