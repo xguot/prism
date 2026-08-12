@@ -25,18 +25,18 @@ theme_mda <- function(legend_pos = "bottom") {
 }
 
 # Method levels and aesthetics
-method_levels <- c("FIML", "FIML_lavPredict", "FIML_stochastic",
-                   "MICE_norm", "missForest", "missRanger",
+method_levels <- c("FIML", "FIML_lavPredict", "MICE",
+                   "missForest", "missRanger",
                    "PRISM", "PRISM_MI")
 method_colors <- c(
   "FIML"             = "#000000", "FIML_lavPredict"  = "#999999",
-  "FIML_stochastic"  = "#56B4E9", "MICE_norm"        = "#E69F00",
+  "MICE"             = "#E69F00",
   "missForest"       = "#009E73", "missRanger"       = "#0072B2",
   "PRISM"            = "#D55E00", "PRISM_MI"         = "#CC79A7"
 )
 method_shapes <- c(
-  "FIML" = 17, "FIML_lavPredict" = 15, "FIML_stochastic" = 18,
-  "MICE_norm" = 16, "missForest" = 8, "missRanger" = 4,
+  "FIML" = 17, "FIML_lavPredict" = 15, "MICE" = 16,
+  "missForest" = 8, "missRanger" = 4,
   "PRISM" = 19, "PRISM_MI" = 1
 )
 scale_method_aes <- list(
@@ -56,9 +56,12 @@ prod$dist   <- factor(prod$dist, levels = dist_levels)
 prod$N_label <- factor(paste0("N = ", prod$N),
                        levels = paste0("N = ", c(100, 200, 500, 1000, 5000, 10000)))
 
+# Drop methods kept only in supplementary material
+keep_methods <- c("FIML", "FIML_lavPredict", "MICE", "missForest", "missRanger", "PRISM", "PRISM_MI")
+
 # Aggregate Frobenius
 frob_agg <- prod %>%
-  filter(is.finite(f_dist)) %>%
+  filter(is.finite(f_dist), method %in% keep_methods) %>%
   group_by(N, N_label, miss, dist, mech, method) %>%
   summarise(frob_mean = mean(f_dist, na.rm = TRUE),
             frob_sd   = sd(f_dist, na.rm = TRUE), .groups = "drop")
@@ -76,7 +79,7 @@ est_cols <- c(psi_L = "est_var_L", psi_S = "est_var_S", psi_LS = "est_cov_LS",
 bias_agg <- do.call(rbind, lapply(param_names, function(pn) {
   tv <- beta_true[pn]; ec <- est_cols[pn]
   prod %>%
-    filter(is.finite(.data[[ec]])) %>%
+    filter(is.finite(.data[[ec]]), method %in% keep_methods) %>%
     mutate(param = pn, est = .data[[ec]],
            rel_bias = if (abs(tv) < 1e-12) est - tv else 100 * (est - tv) / tv) %>%
     select(N, N_label, miss, dist, mech, method, param, rel_bias)
@@ -96,7 +99,7 @@ p <- frob_agg %>% filter(mech == "MAR") %>%
   scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
   scale_method_aes +
   facet_grid(dist ~ N_label, scales = "free_y") +
-  labs(x = "Missingness Rate", y = "Frobenius Distance", title = "Covariance Recovery: Frobenius Distance to True Covariance (MAR)") +
+  labs(x = "Missingness Rate", y = "Frobenius Distance", title = "Frobenius Distance to True Covariance (MAR)") +
   theme_mda()
 ggsave("figs/Frobenius_Distance_MAR.pdf", p, width = 30, height = 20, units = "cm")
 
@@ -109,7 +112,7 @@ p <- frob_agg %>% filter(mech == "MNAR") %>%
   scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
   scale_method_aes +
   facet_grid(dist ~ N_label, scales = "free_y") +
-  labs(x = "Missingness Rate", y = "Frobenius Distance", title = "Covariance Recovery: Frobenius Distance to True Covariance (MNAR)") +
+  labs(x = "Missingness Rate", y = "Frobenius Distance", title = "Frobenius Distance to True Covariance (MNAR)") +
   theme_mda()
 ggsave("figs/Frobenius_Distance_MNAR.pdf", p, width = 30, height = 20, units = "cm")
 
