@@ -247,6 +247,7 @@ run_iteration <- function(sim_id, params) {
   time_fp <- system.time({
     s_var_fp <- NA; s_se_fp <- NA; d_fp <- NA
     gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
+    gs <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
     if (!is.null(fit_fiml)) {
       imp_fp <- tryCatch(lavaan::lavPredict(fit_fiml, type = "ov"),
                          error = function(e) NULL)
@@ -257,7 +258,7 @@ run_iteration <- function(sim_id, params) {
         s_var_fp <- sv["s_var"]; s_se_fp <- sv["s_se"]
         fit_fp <- tryCatch(growth(gcm_mod, data = as.data.frame(imp_fp)),
                            error = function(e) NULL)
-        if (!is.null(fit_fp)) gp <- extract_gcm_params(fit_fp)
+        if (!is.null(fit_fp)) { gp <- extract_gcm_params(fit_fp); gs <- extract_gcm_params(fit_fp, "se") }
       }
     }
   })["elapsed"]
@@ -265,7 +266,10 @@ run_iteration <- function(sim_id, params) {
                             unname(time_fp),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
-                             psi_LS = gp["psi_LS"])
+                            psi_LS = gp["psi_LS"],
+                            se_L = gs["beta_L"], se_S = gs["beta_S"],
+                            se_var_L = gs["psi_L"], se_var_S = gs["psi_S"],
+                            se_cov_LS = gs["psi_LS"])
 
 
 
@@ -320,18 +324,22 @@ run_iteration <- function(sim_id, params) {
                        error = function(e) NULL)
     s_var_mf <- NA; s_se_mf <- NA; d_mf <- NA
     gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
+    gs <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
     if (!is.null(imp_mf)) {
       d_mf <- frob_dist(stats::cov(imp_mf[, 1:t_points]), true_cov)
       sv <- extract_slope_var(imp_mf, gcm_mod)
       s_var_mf <- sv["s_var"]; s_se_mf <- sv["s_se"]
       fit_mf <- tryCatch(growth(gcm_mod, data = imp_mf), error = function(e) NULL)
-      if (!is.null(fit_mf)) gp <- extract_gcm_params(fit_mf)
+      if (!is.null(fit_mf)) { gp <- extract_gcm_params(fit_mf); gs <- extract_gcm_params(fit_mf, "se") }
     }
   })["elapsed"]
   res_list[[4]] <- make_row("missForest", d_mf, s_var_mf, s_se_mf, unname(time_mf),
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
-                            psi_LS = gp["psi_LS"])
+                            psi_LS = gp["psi_LS"],
+                            se_L = gs["beta_L"], se_S = gs["beta_S"],
+                            se_var_L = gs["psi_L"], se_var_S = gs["psi_S"],
+                            se_cov_LS = gs["psi_LS"])
 
   # ── prism_fiml: FIML model-implied Σ target ───────────────────────────
   # Uses prism_fiml() which fits a lavaan growth model with FIML to extract
@@ -343,12 +351,13 @@ run_iteration <- function(sim_id, params) {
                        error = function(e) NULL)
     s_var_sf <- NA; s_se_sf <- NA; d_sf <- NA
     gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
+    gs <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
     if (!is.null(imp_sf)) {
       d_sf <- frob_dist(stats::cov(imp_sf[, 1:t_points]), true_cov)
       sv <- extract_slope_var(imp_sf, gcm_mod)
       s_var_sf <- sv["s_var"]; s_se_sf <- sv["s_se"]
       fit_sf <- tryCatch(growth(gcm_mod, data = imp_sf), error = function(e) NULL)
-      if (!is.null(fit_sf)) gp <- extract_gcm_params(fit_sf)
+      if (!is.null(fit_sf)) { gp <- extract_gcm_params(fit_sf); gs <- extract_gcm_params(fit_sf, "se") }
     }
   })["elapsed"]
   res_list[[5]] <- make_row("PRISM", d_sf, s_var_sf, s_se_sf,
@@ -356,6 +365,9 @@ run_iteration <- function(sim_id, params) {
                             beta_L = gp["beta_L"], beta_S = gp["beta_S"],
                             psi_L = gp["psi_L"], psi_S = gp["psi_S"],
                             psi_LS = gp["psi_LS"],
+                            se_L = gs["beta_L"], se_S = gs["beta_S"],
+                            se_var_L = gs["psi_L"], se_var_S = gs["psi_S"],
+                            se_cov_LS = gs["psi_LS"],
                             pipeline_time = unname(time_mf) + unname(time_sf))
 
   # ── prism_mi: Proper Multiple Imputation ────────────────────────────────────

@@ -154,13 +154,14 @@ for (pn in param_names) {
   ggsave(sprintf("figs/bias_mar_%s.pdf", param_files[pn]), p, width = 30, height = 20, units = "cm")
 }
 
-# FIGURES 8-12 — SE Ratio per parameter (MAR)
-total_figs <- 2 + 2 * length(param_names)
+# FIGURES 8-22 — SE metrics per parameter (MAR)
+total_figs <- 2 + 4 * length(param_names)
 
 if (!is.null(se_ratio_agg)) {
   for (pn in param_names) {
-    cat(sprintf("Plotting SE Ratio: %s...\n", pn))
     fig <- se_ratio_agg %>% filter(mech == "MAR", param == pn)
+
+    # SE Ratio
     p <- ggplot(fig, aes(x = miss, y = se_ratio, group = method)) +
       geom_hline(yintercept = 1, linetype = "dashed", color = "grey50", linewidth = 0.4) +
       geom_line(aes(color = method), linewidth = 0.5) +
@@ -172,6 +173,30 @@ if (!is.null(se_ratio_agg)) {
            title = paste0("SE Ratio: ", param_labels[pn])) +
       theme_mda()
     ggsave(sprintf("figs/se_ratio_%s.pdf", param_files[pn]), p, width = 30, height = 20, units = "cm")
+
+    # Empirical SE
+    p <- ggplot(fig, aes(x = miss, y = empirical_se, group = method)) +
+      geom_line(aes(color = method), linewidth = 0.5) +
+      geom_point(aes(color = method, shape = method), size = 1.0) +
+      scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
+      scale_method_aes +
+      facet_grid(dist ~ N_label, scales = "free_y") +
+      labs(x = "Missingness Rate", y = "Empirical SE",
+           title = paste0("Empirical SE: ", param_labels[pn])) +
+      theme_mda()
+    ggsave(sprintf("figs/empirical_se_%s.pdf", param_files[pn]), p, width = 30, height = 20, units = "cm")
+
+    # Average Model SE
+    p <- ggplot(fig, aes(x = miss, y = avg_model_se, group = method)) +
+      geom_line(aes(color = method), linewidth = 0.5) +
+      geom_point(aes(color = method, shape = method), size = 1.0) +
+      scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
+      scale_method_aes +
+      facet_grid(dist ~ N_label, scales = "free_y") +
+      labs(x = "Missingness Rate", y = "Average Model SE",
+           title = paste0("Average Model SE: ", param_labels[pn])) +
+      theme_mda()
+    ggsave(sprintf("figs/model_se_%s.pdf", param_files[pn]), p, width = 30, height = 20, units = "cm")
   }
 }
 
