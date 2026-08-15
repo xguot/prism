@@ -115,9 +115,10 @@ p <- frob_agg %>% filter(mech == "MAR") %>%
   geom_line(aes(color = method), linewidth = 0.5) +
   geom_point(aes(color = method, shape = method), size = 1.0) +
   scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
+  scale_y_log10() +
   scale_method_aes +
   facet_grid(dist ~ N_label, scales = "free_y") +
-  labs(x = "Missingness Rate", y = "Frobenius Distance", title = "Frobenius Distance to True Covariance (MAR)") +
+  labs(x = "Missingness Rate", y = "Frobenius Distance (log10)", title = "Frobenius Distance to True Covariance (MAR)") +
   theme_mda()
 ggsave("figs/Frobenius_Distance_MAR.pdf", p, width = 30, height = 20, units = "cm")
 
@@ -128,9 +129,10 @@ p <- frob_agg %>% filter(mech == "MNAR") %>%
   geom_line(aes(color = method), linewidth = 0.5) +
   geom_point(aes(color = method, shape = method), size = 1.0) +
   scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
+  scale_y_log10() +
   scale_method_aes +
   facet_grid(dist ~ N_label, scales = "free_y") +
-  labs(x = "Missingness Rate", y = "Frobenius Distance", title = "Frobenius Distance to True Covariance (MNAR)") +
+  labs(x = "Missingness Rate", y = "Frobenius Distance (log10)", title = "Frobenius Distance to True Covariance (MNAR)") +
   theme_mda()
 ggsave("figs/Frobenius_Distance_MNAR.pdf", p, width = 30, height = 20, units = "cm")
 
@@ -186,9 +188,10 @@ if (!is.null(se_ratio_agg)) {
         geom_line(aes(color = method), linewidth = 0.5) +
         geom_point(aes(color = method, shape = method), size = 1.0) +
         scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
+        scale_y_log10() +
         scale_method_aes +
         facet_grid(dist ~ N_label, scales = "free_y") +
-        labs(x = "Missingness Rate", y = "Empirical SE",
+        labs(x = "Missingness Rate", y = "Empirical SE (log10)",
              title = paste0("Empirical SE: ", param_labels[pn], " (", mech_i, ")")) +
         theme_mda()
       ggsave(sprintf("figs/empirical_se_%s_%s.pdf", tolower(mech_i), param_files[pn]), p,
@@ -199,9 +202,10 @@ if (!is.null(se_ratio_agg)) {
         geom_line(aes(color = method), linewidth = 0.5) +
         geom_point(aes(color = method, shape = method), size = 1.0) +
         scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
+        scale_y_log10() +
         scale_method_aes +
         facet_grid(dist ~ N_label, scales = "free_y") +
-        labs(x = "Missingness Rate", y = "Average Model SE",
+        labs(x = "Missingness Rate", y = "Average Model SE (log10)",
              title = paste0("Average Model SE: ", param_labels[pn], " (", mech_i, ")")) +
         theme_mda()
       ggsave(sprintf("figs/model_se_%s_%s.pdf", tolower(mech_i), param_files[pn]), p,
