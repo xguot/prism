@@ -24,16 +24,19 @@ theme_mda <- function(legend_pos = "bottom") {
     )
 }
 
+# Relabel MICE to reflect the rf (ranger) backend
+prod$method[prod$method == "MICE"] <- "MICE (RF)"
+
 # Method levels and aesthetics
-method_levels <- c("FIML", "MICE", "missForest", "PRISM", "PRISM_MI")
+method_levels <- c("FIML", "MICE (RF)", "missForest", "PRISM", "PRISM_MI")
 method_colors <- c(
   "FIML"             = "#000000",
-  "MICE"             = "#E69F00",
+  "MICE (RF)"        = "#E69F00",
   "missForest"       = "#009E73",
   "PRISM"            = "#D55E00", "PRISM_MI"         = "#CC79A7"
 )
 method_shapes <- c(
-  "FIML" = 17, "MICE" = 16,
+  "FIML" = 17, "MICE (RF)" = 16,
   "missForest" = 8, "PRISM" = 19, "PRISM_MI" = 1
 )
 scale_method_aes <- list(
@@ -54,7 +57,7 @@ prod$N_label <- factor(paste0("N = ", prod$N),
                        levels = paste0("N = ", c(100, 200, 500, 1000, 5000, 10000)))
 
 # Drop methods kept only in supplementary material
-keep_methods <- c("FIML", "MICE", "missForest", "PRISM", "PRISM_MI")
+keep_methods <- c("FIML", "MICE (RF)", "missForest", "PRISM", "PRISM_MI")
 
 # Aggregate Frobenius
 frob_agg <- prod %>%
