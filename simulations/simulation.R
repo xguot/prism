@@ -273,11 +273,11 @@ run_iteration <- function(sim_id, params) {
 
 
 
-  # ── MICE (cart/random forest, MI m=20) ───────────────────────────────────
+  # ── MICE (random forest via ranger, MI m=20) ──────────────────────────────
   time_mice_rf <- system.time({
     m_mice_rf <- 20
     imp_mice_rf_list <- tryCatch({
-      imp_obj_rf <- mice::mice(df_miss, m = m_mice_rf, method = "cart", printFlag = FALSE)
+      imp_obj_rf <- mice::mice(df_miss, m = m_mice_rf, method = "rf", printFlag = FALSE)
       mice::complete(imp_obj_rf, "all")
     }, error = function(e) NULL)
 
