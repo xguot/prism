@@ -25,16 +25,15 @@ theme_mda <- function(legend_pos = "bottom") {
 }
 
 # Method levels and aesthetics
-method_levels <- c("FIML", "FIML_lavPredict", "MICE",
-                   "missForest", "PRISM", "PRISM_MI")
+method_levels <- c("FIML", "MICE", "missForest", "PRISM", "PRISM_MI")
 method_colors <- c(
-  "FIML"             = "#000000", "FIML_lavPredict"  = "#999999",
+  "FIML"             = "#000000",
   "MICE"             = "#E69F00",
   "missForest"       = "#009E73",
   "PRISM"            = "#D55E00", "PRISM_MI"         = "#CC79A7"
 )
 method_shapes <- c(
-  "FIML" = 17, "FIML_lavPredict" = 15, "MICE" = 16,
+  "FIML" = 17, "MICE" = 16,
   "missForest" = 8, "PRISM" = 19, "PRISM_MI" = 1
 )
 scale_method_aes <- list(
@@ -55,7 +54,7 @@ prod$N_label <- factor(paste0("N = ", prod$N),
                        levels = paste0("N = ", c(100, 200, 500, 1000, 5000, 10000)))
 
 # Drop methods kept only in supplementary material
-keep_methods <- c("FIML", "FIML_lavPredict", "MICE", "missForest", "PRISM", "PRISM_MI")
+keep_methods <- c("FIML", "MICE", "missForest", "PRISM", "PRISM_MI")
 
 # Aggregate Frobenius
 frob_agg <- prod %>%
@@ -132,71 +131,79 @@ p <- frob_agg %>% filter(mech == "MNAR") %>%
   theme_mda()
 ggsave("figs/Frobenius_Distance_MNAR.pdf", p, width = 30, height = 20, units = "cm")
 
-# FIGURES 3-7 — Absolute Relative Bias per parameter (MAR)
-for (pn in param_names) {
-  cat(sprintf("Plotting Bias: %s...\n", pn))
-  tv <- beta_true[pn]
-  y_lab <- if (abs(tv) < 1e-12) "Absolute Raw Bias" else paste0("Absolute Relative Bias in ", param_labels[pn], " (%)")
-  hline <- if (abs(tv) < 1e-12) NULL else
-    geom_hline(yintercept = 10, linetype = "dashed", color = "grey50", linewidth = 0.4)
+# Absolute Relative Bias per parameter (MAR + MNAR)
+for (mech_i in c("MAR", "MNAR")) {
+  for (pn in param_names) {
+    cat(sprintf("Plotting Bias (%s): %s...\n", mech_i, pn))
+    tv <- beta_true[pn]
+    y_lab <- if (abs(tv) < 1e-12) "Absolute Raw Bias" else paste0("Absolute Relative Bias in ", param_labels[pn], " (%)")
+    hline <- if (abs(tv) < 1e-12) NULL else
+      geom_hline(yintercept = 10, linetype = "dashed", color = "grey50", linewidth = 0.4)
 
-  fig <- bias_agg %>% filter(mech == "MAR", param == pn)
-  p <- ggplot(fig, aes(x = miss, y = arb_mean, group = method)) +
-    hline +
-    geom_line(aes(color = method), linewidth = 0.5) +
-    geom_point(aes(color = method, shape = method), size = 1.0) +
-    scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
-    scale_method_aes +
-    facet_grid(dist ~ N_label, scales = "free_y") +
-    labs(x = "Missingness Rate", y = y_lab,
-         title = param_labels[pn]) +
-    theme_mda()
-  ggsave(sprintf("figs/bias_mar_%s.pdf", param_files[pn]), p, width = 30, height = 20, units = "cm")
+    fig <- bias_agg %>% filter(mech == mech_i, param == pn)
+    p <- ggplot(fig, aes(x = miss, y = arb_mean, group = method)) +
+      hline +
+      geom_line(aes(color = method), linewidth = 0.5) +
+      geom_point(aes(color = method, shape = method), size = 1.0) +
+      scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
+      scale_method_aes +
+      facet_grid(dist ~ N_label, scales = "free_y") +
+      labs(x = "Missingness Rate", y = y_lab,
+           title = paste0(param_labels[pn], " (", mech_i, ")")) +
+      theme_mda()
+    ggsave(sprintf("figs/bias_%s_%s.pdf", tolower(mech_i), param_files[pn]), p,
+           width = 30, height = 20, units = "cm")
+  }
 }
 
-# FIGURES 8-22 — SE metrics per parameter (MAR)
-total_figs <- 2 + 4 * length(param_names)
+# SE metrics per parameter (MAR + MNAR)
+total_figs <- 2 + 4 * length(param_names) * 2
 
 if (!is.null(se_ratio_agg)) {
-  for (pn in param_names) {
-    fig <- se_ratio_agg %>% filter(mech == "MAR", param == pn)
+  for (mech_i in c("MAR", "MNAR")) {
+    for (pn in param_names) {
+      fig <- se_ratio_agg %>% filter(mech == mech_i, param == pn)
 
-    # SE Ratio
-    p <- ggplot(fig, aes(x = miss, y = se_ratio, group = method)) +
-      geom_hline(yintercept = 1, linetype = "dashed", color = "grey50", linewidth = 0.4) +
-      geom_line(aes(color = method), linewidth = 0.5) +
-      geom_point(aes(color = method, shape = method), size = 1.0) +
-      scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
-      scale_method_aes +
-      facet_grid(dist ~ N_label, scales = "free_y") +
-      labs(x = "Missingness Rate", y = "SE Ratio (Model SE / Empirical SE)",
-           title = paste0("SE Ratio: ", param_labels[pn])) +
-      theme_mda()
-    ggsave(sprintf("figs/se_ratio_%s.pdf", param_files[pn]), p, width = 30, height = 20, units = "cm")
+      # SE Ratio
+      p <- ggplot(fig, aes(x = miss, y = se_ratio, group = method)) +
+        geom_hline(yintercept = 1, linetype = "dashed", color = "grey50", linewidth = 0.4) +
+        geom_line(aes(color = method), linewidth = 0.5) +
+        geom_point(aes(color = method, shape = method), size = 1.0) +
+        scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
+        scale_method_aes +
+        facet_grid(dist ~ N_label, scales = "free_y") +
+        labs(x = "Missingness Rate", y = "SE Ratio (Model SE / Empirical SE)",
+             title = paste0("SE Ratio: ", param_labels[pn], " (", mech_i, ")")) +
+        theme_mda()
+      ggsave(sprintf("figs/se_ratio_%s_%s.pdf", tolower(mech_i), param_files[pn]), p,
+             width = 30, height = 20, units = "cm")
 
-    # Empirical SE
-    p <- ggplot(fig, aes(x = miss, y = empirical_se, group = method)) +
-      geom_line(aes(color = method), linewidth = 0.5) +
-      geom_point(aes(color = method, shape = method), size = 1.0) +
-      scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
-      scale_method_aes +
-      facet_grid(dist ~ N_label, scales = "free_y") +
-      labs(x = "Missingness Rate", y = "Empirical SE",
-           title = paste0("Empirical SE: ", param_labels[pn])) +
-      theme_mda()
-    ggsave(sprintf("figs/empirical_se_%s.pdf", param_files[pn]), p, width = 30, height = 20, units = "cm")
+      # Empirical SE
+      p <- ggplot(fig, aes(x = miss, y = empirical_se, group = method)) +
+        geom_line(aes(color = method), linewidth = 0.5) +
+        geom_point(aes(color = method, shape = method), size = 1.0) +
+        scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
+        scale_method_aes +
+        facet_grid(dist ~ N_label, scales = "free_y") +
+        labs(x = "Missingness Rate", y = "Empirical SE",
+             title = paste0("Empirical SE: ", param_labels[pn], " (", mech_i, ")")) +
+        theme_mda()
+      ggsave(sprintf("figs/empirical_se_%s_%s.pdf", tolower(mech_i), param_files[pn]), p,
+             width = 30, height = 20, units = "cm")
 
-    # Average Model SE
-    p <- ggplot(fig, aes(x = miss, y = avg_model_se, group = method)) +
-      geom_line(aes(color = method), linewidth = 0.5) +
-      geom_point(aes(color = method, shape = method), size = 1.0) +
-      scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
-      scale_method_aes +
-      facet_grid(dist ~ N_label, scales = "free_y") +
-      labs(x = "Missingness Rate", y = "Average Model SE",
-           title = paste0("Average Model SE: ", param_labels[pn])) +
-      theme_mda()
-    ggsave(sprintf("figs/model_se_%s.pdf", param_files[pn]), p, width = 30, height = 20, units = "cm")
+      # Average Model SE
+      p <- ggplot(fig, aes(x = miss, y = avg_model_se, group = method)) +
+        geom_line(aes(color = method), linewidth = 0.5) +
+        geom_point(aes(color = method, shape = method), size = 1.0) +
+        scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
+        scale_method_aes +
+        facet_grid(dist ~ N_label, scales = "free_y") +
+        labs(x = "Missingness Rate", y = "Average Model SE",
+             title = paste0("Average Model SE: ", param_labels[pn], " (", mech_i, ")")) +
+        theme_mda()
+      ggsave(sprintf("figs/model_se_%s_%s.pdf", tolower(mech_i), param_files[pn]), p,
+             width = 30, height = 20, units = "cm")
+    }
   }
 }
 
