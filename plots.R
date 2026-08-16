@@ -106,6 +106,48 @@ se_ratio_agg <- do.call(rbind, lapply(param_names, function(pn) {
     mutate(param = pn)
 }))
 
+# Aggregate convergence rate
+conv_agg <- prod %>%
+  filter(method %in% keep_methods) %>%
+  group_by(N, N_label, miss, dist, mech, method) %>%
+  summarise(conv_rate = mean(converged, na.rm = TRUE), .groups = "drop")
+
+# Aggregate timing
+timing_agg <- prod %>%
+  filter(method %in% keep_methods, is.finite(time_sec)) %>%
+  group_by(method) %>%
+  summarise(mean_time = mean(time_sec, na.rm = TRUE),
+            sd_time   = sd(time_sec, na.rm = TRUE), .groups = "drop")
+
+# Aggregate coverage (approx: est +/- 1.96 * se)
+cov_agg <- do.call(rbind, lapply(param_names, function(pn) {
+  tv <- beta_true[pn]; ec <- est_cols[pn]; sc <- se_cols[pn]
+  if (!sc %in% names(prod)) return(NULL)
+  prod %>%
+    filter(is.finite(.data[[ec]]), is.finite(.data[[sc]]), method %in% keep_methods) %>%
+    mutate(
+      lo = .data[[ec]] - 1.96 * .data[[sc]],
+      hi = .data[[ec]] + 1.96 * .data[[sc]],
+      covered = (lo <= tv) & (hi >= tv)
+    ) %>%
+    group_by(N, N_label, miss, dist, mech, method) %>%
+    summarise(coverage = mean(covered, na.rm = TRUE), .groups = "drop") %>%
+    mutate(param = pn)
+}))
+
+# Aggregate MSE (bias^2 + empirical variance)
+mse_agg <- do.call(rbind, lapply(param_names, function(pn) {
+  tv <- beta_true[pn]; ec <- est_cols[pn]
+  prod %>%
+    filter(is.finite(.data[[ec]]), method %in% keep_methods) %>%
+    group_by(N, N_label, miss, dist, mech, method) %>%
+    summarise(
+      mse = (mean(.data[[ec]], na.rm = TRUE) - tv)^2 + var(.data[[ec]], na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(param = pn)
+}))
+
 dir.create("figs", showWarnings = FALSE)
 
 # FIGURE 1 — Frobenius MAR
@@ -211,6 +253,76 @@ if (!is.null(se_ratio_agg)) {
       ggsave(sprintf("figs/model_se_%s_%s.pdf", tolower(mech_i), param_files[pn]), p,
              width = 30, height = 20, units = "cm")
     }
+  }
+}
+
+# Convergence rate (MAR + MNAR)
+for (mech_i in c("MAR", "MNAR")) {
+  p <- conv_agg %>% filter(mech == mech_i) %>%
+    ggplot(aes(x = miss, y = conv_rate, group = method)) +
+    geom_hline(yintercept = 1, linetype = "dashed", color = "grey50", linewidth = 0.4) +
+    geom_line(aes(color = method), linewidth = 0.5) +
+    geom_point(aes(color = method, shape = method), size = 1.0) +
+    scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
+    scale_method_aes +
+    facet_grid(dist ~ N_label) +
+    labs(x = "Missingness Rate", y = "Convergence Rate",
+         title = paste0("Convergence Rate (", mech_i, ")")) +
+    theme_mda()
+  ggsave(sprintf("figs/conv_rate_%s.pdf", tolower(mech_i)), p,
+         width = 30, height = 20, units = "cm")
+}
+
+# Timing comparison (bar)
+p <- timing_agg %>%
+  ggplot(aes(x = method, y = mean_time, fill = method)) +
+  geom_col(width = 0.7) +
+  geom_errorbar(aes(ymin = pmax(mean_time - sd_time, 1e-3),
+                    ymax = mean_time + sd_time),
+                width = 0.2, linewidth = 0.3) +
+  scale_y_log10() +
+  scale_fill_manual(values = method_colors) +
+  labs(x = NULL, y = "Mean Runtime (seconds, log10)",
+       title = "Computational Cost by Method") +
+  theme_mda(legend_pos = "none")
+ggsave("figs/timing_comparison.pdf", p, width = 20, height = 12, units = "cm")
+
+# Coverage (MAR + MNAR, 5 parameters)
+for (mech_i in c("MAR", "MNAR")) {
+  for (pn in param_names) {
+    fig <- cov_agg %>% filter(mech == mech_i, param == pn)
+    p <- ggplot(fig, aes(x = miss, y = coverage, group = method)) +
+      geom_hline(yintercept = 0.95, linetype = "dashed", color = "grey50", linewidth = 0.4) +
+      geom_line(aes(color = method), linewidth = 0.5) +
+      geom_point(aes(color = method, shape = method), size = 1.0) +
+      scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
+      scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.5, 0.8, 0.9, 0.95, 1)) +
+      scale_method_aes +
+      facet_grid(dist ~ N_label) +
+      labs(x = "Missingness Rate", y = "95% CI Coverage",
+           title = paste0("Coverage: ", param_labels[pn], " (", mech_i, ")")) +
+      theme_mda()
+    ggsave(sprintf("figs/coverage_%s_%s.pdf", tolower(mech_i), param_files[pn]), p,
+           width = 30, height = 20, units = "cm")
+  }
+}
+
+# MSE (MAR + MNAR, 5 parameters)
+for (mech_i in c("MAR", "MNAR")) {
+  for (pn in param_names) {
+    fig <- mse_agg %>% filter(mech == mech_i, param == pn)
+    p <- ggplot(fig, aes(x = miss, y = mse, group = method)) +
+      geom_line(aes(color = method), linewidth = 0.5) +
+      geom_point(aes(color = method, shape = method), size = 1.0) +
+      scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
+      scale_y_log10() +
+      scale_method_aes +
+      facet_grid(dist ~ N_label, scales = "free_y") +
+      labs(x = "Missingness Rate", y = "MSE (log10)",
+           title = paste0("MSE: ", param_labels[pn], " (", mech_i, ")")) +
+      theme_mda()
+    ggsave(sprintf("figs/mse_%s_%s.pdf", tolower(mech_i), param_files[pn]), p,
+           width = 30, height = 20, units = "cm")
   }
 }
 
