@@ -5,7 +5,7 @@ Authors@R: person("Xiyuan", "Guo", email = "tommyguo039@gmail.com", role = c("au
 Description: Fits structural equation models (latent growth models, CFAs,
     and general SEMs) via FIML, extracts the model-implied covariance
     matrix, and projects an initial imputation onto that structural target
-    under a regularized dual objective that balances fidelity to the initial
+    under a regularized constrained objective that balances fidelity to the initial
     imputation against covariance matching while preserving column means.
     Supports single imputation (prism_fiml, prism_sem) and two-level proper
     multiple imputation (prism_mi) with stochastic initializations and

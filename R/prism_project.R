@@ -4,7 +4,9 @@
 # positive semidefinite.  This function zeroes out negative eigenvalues and
 # reconstructs, yielding the nearest PSD matrix (Higham 1988) in Frobenius
 # norm.  A small ridge is *not* added; zeros are acceptable eigenvalues for a
-# PSD matrix and are handled by the downstream validation.
+# PSD matrix and are handled by the downstream validation.  A materially
+# non-PSD input (Frobenius change above numerical noise) triggers a warning
+# rather than a silent retargeting.
 #' @keywords internal
 nearest_psd <- function(mat) {
   if (any(is.na(mat))) {
@@ -17,14 +19,26 @@ nearest_psd <- function(mat) {
   }
   vals[vals < 0] <- 0
   result <- eig$vectors %*% diag(vals) %*% t(eig$vectors)
-  (result + t(result)) / 2
+  result <- (result + t(result)) / 2
+  delta <- sqrt(sum((mat - result)^2))
+  if (delta > 1e-6) {
+    warning(
+      "The covariance matrix was projected onto the PSD cone with Frobenius ",
+      "change ", format(delta, digits = 3),
+      ": this exceeds numerical noise and may indicate a misspecified ",
+      "target (e.g. a non-converged model fit).",
+      call. = FALSE
+    )
+  }
+  result
 }
 
 
 # Emit a warning summarizing the optimizer termination state reported by the
-# C++ engine.  Only "converged_feasible" is silent; every other state signals
-# that the returned data must not be treated as a first-order solution to the
-# unconstrained-within-feasible-set problem.
+# C++ engine.  Only "converged_feasible" is silent; "converged" with a
+# nonzero covariance gap reflects the fidelity/structure trade-off of the
+# regularized objective (not target infeasibility), and non-stationary stops
+# are flagged explicitly.
 #' @keywords internal
 warn_prism_diagnostics <- function(diag) {
   if (identical(diag$status, "converged_feasible")) {
@@ -32,18 +46,12 @@ warn_prism_diagnostics <- function(diag) {
   }
   msg <- switch(
     diag$status,
-    constrained_geometric_limit = sprintf(
-      paste0("Reached a constrained stationary point with covariance gap %.3e: ",
-             "the mean-preservation constraints are binding. This is a genuine ",
-             "geometric limit, not an early stop. Consider increasing ",
-             "'lambda_sigma' or supplying a different initial imputation."),
-      diag$feas_gap
-    ),
-    geometric_infeasible = sprintf(
-      paste0("Reached a stationary point with inactive mean constraints but a ",
-             "covariance gap of %.3e: the target is geometrically unreachable ",
-             "given the frozen observed cells and the missingness pattern."),
-      diag$feas_gap
+    converged = sprintf(
+      paste0("Reached a first-order stationary point with covariance gap ",
+             "%.3e (tol_cov = %.3e): the regularized optimum does not fully ",
+             "match the target. Increase 'lambda_sigma' to enforce the ",
+             "model-implied structure more strongly."),
+      diag$feas_gap, diag$tol_cov
     ),
     stalled_line_search = sprintf(
       paste0("Line search stalled before stationarity (KKT residual %.3e): ",
@@ -65,34 +73,40 @@ warn_prism_diagnostics <- function(diag) {
 # Internal covariance projection engine (PRISM v2).
 #
 # Project an initial imputation matrix onto the structural target under the
-# regularized dual objective
+# regularized constrained objective
 #
-#   f(X) = 1/2 ||M o (X - X0)||_F^2 + (lambda_sigma / 2) ||S(X) - S_t||_F^2
+#   f(X) = 1 / (2 N_mis) ||M o (X - X0)||_F^2
+#        + lambda_sigma / (2 p^2) ||S(X) - S_t||_F^2
 #
-# subject to the observed cells being frozen and the column means of the
-# initial imputation preserved.  The C++ engine projects the gradient of the
-# missing cells onto the zero-sum subspace of each column before every step
-# (mean-preserving projected gradient descent) and reports KKT diagnostics:
-# the projected-gradient norm (r_kkT), the covariance feasibility gap, and
-# per-column Lagrange multiplier estimates.  Only originally-missing cells
-# are updated.
+# where N_mis is the number of missing cells and p the number of observed
+# variables.  Both terms are normalized (fidelity per missing cell,
+# covariance discrepancy per matrix entry), so lambda_sigma is dimensionless
+# and comparable across sample sizes, variable counts, and missingness
+# rates.  The objective is minimized subject to the observed cells being
+# frozen and the column means of the initial imputation preserved.  The C++
+# engine projects the gradient of the missing cells onto the zero-sum
+# subspace of each column before every step (mean-preserving projected
+# gradient descent) and reports KKT diagnostics: the projected-gradient norm
+# (r_kkT), the covariance feasibility gap, and per-column Lagrange
+# multiplier estimates.  Only originally-missing cells are updated.
 #
-# The data are standardized internally so that lambda_sigma and the
-# tolerances are comparable across variable scales; results are unscaled
-# afterwards and missing-cell column sums are re-anchored to the initial
-# imputation as a defensive exactness guarantee.
+# The data are standardized internally so that the objective and tolerances
+# are comparable across variable scales; results are unscaled afterwards and
+# missing-cell column sums are re-anchored to the initial imputation as a
+# defensive exactness guarantee.
 #'
 #' @keywords internal
 prism_project <- function(data, ov_names, sigma_target,
                           initial_imputation = NULL,
-                          lambda_sigma = NULL, lr = 0.01,
+                          lambda_sigma = NULL, lr = 1,
                           tol_kkT = 1e-4, tol_cov = 1e-6,
                           max_iter = 2000) {
 
-  # structural weight defaults: the covariance term carries a 1/(n - 1)
-  # factor, so the natural balance point scales with the sample size
+  # structural weight default: with normalized losses lambda_sigma is
+  # dimensionless; 1 gives equal weight to both terms (a sensitivity grid of
+  # 0.25-4 is recommended for simulation studies)
   if (is.null(lambda_sigma)) {
-    lambda_sigma <- nrow(data) / 2
+    lambda_sigma <- 1.0
   }
 
   # argument guards
@@ -154,6 +168,11 @@ prism_project <- function(data, ov_names, sigma_target,
   mask  <- ifelse(is.na(x_raw), 1.0, 0.0)
   storage.mode(mask) <- "double"
 
+  if (sum(mask) == 0) {
+    warning("No missing values in the observed variables; nothing to impute.",
+            call. = FALSE)
+  }
+
   # check for entirely-missing columns
   na_counts <- colSums(is.na(data[, ov_names]))
   all_missing <- na_counts == nrow(data)
@@ -184,6 +203,20 @@ prism_project <- function(data, ov_names, sigma_target,
   if (any(is.na(x_hallucinated)) || any(is.infinite(x_hallucinated))) {
     stop("The initial_imputation matrix contains NAs or Infs. ",
          "The initial imputation must be complete and finite.")
+  }
+
+  # Enforce the observed cells to the original data before standardization
+  # and anchor computation, so the preserved column means refer to the
+  # completed data as it is actually constructed
+  obs_cells <- !is.na(x_raw)
+  if (any(obs_cells)) {
+    dev <- max(abs(x_hallucinated[obs_cells] - x_raw[obs_cells]))
+    if (dev > 1e-6) {
+      warning("The initial imputation modified observed values (max ",
+              "deviation ", format(dev, digits = 3),
+              "); they are reset to the original data.", call. = FALSE)
+    }
+    x_hallucinated[obs_cells] <- x_raw[obs_cells]
   }
 
   # validate target conditioning
@@ -220,28 +253,17 @@ prism_project <- function(data, ov_names, sigma_target,
   )
   x_refined_scaled <- cpp_result$X_refined
 
-  # Final PSD enforcement on the refined covariance manifold (defensive; the
-  # sample covariance is a Gram matrix and PSD by construction)
-  sigma_refined_scaled <- stats::cov(x_refined_scaled)
-  sigma_psd_scaled <- nearest_psd(sigma_refined_scaled)
-
-  if (sqrt(sum((sigma_refined_scaled - sigma_psd_scaled)^2)) > 1e-9) {
-    e_old <- eigen(sigma_refined_scaled, symmetric = TRUE)
-    e_new <- eigen(sigma_psd_scaled, symmetric = TRUE)
-
-    d_old_inv <- ifelse(e_old$values > 1e-12, 1 / sqrt(e_old$values), 0)
-    d_new     <- sqrt(e_new$values)
-
-    s_old_inv_sqrt <- e_old$vectors %*% diag(d_old_inv) %*% t(e_old$vectors)
-    s_new_sqrt     <- e_new$vectors %*% diag(d_new)     %*% t(e_new$vectors)
-
-    x_centered <- x_refined_scaled -
-      rep(colMeans(x_refined_scaled), each = nrow(x_refined_scaled))
-    x_transformed <- (x_centered %*% s_old_inv_sqrt %*% s_new_sqrt) +
-      rep(colMeans(x_refined_scaled), each = nrow(x_refined_scaled))
-
-    x_refined_scaled <- x_refined_scaled +
-      (x_transformed - x_refined_scaled) * mask
+  # Defensive guard: the sample covariance is a Gram matrix and positive
+  # semidefinite by construction, so a materially negative eigenvalue would
+  # indicate a computational problem rather than something to repair
+  eig_min <- min(eigen(stats::cov(x_refined_scaled), symmetric = TRUE,
+                       only.values = TRUE)$values)
+  if (eig_min < -1e-8) {
+    warning("The refined covariance has a negative eigenvalue (",
+            format(eig_min, digits = 3),
+            ") below the numerical-noise floor; this suggests a ",
+            "computational problem in the projection engine.",
+            call. = FALSE)
   }
 
   # Unscale the results back to original units
@@ -288,7 +310,9 @@ prism_project <- function(data, ov_names, sigma_target,
     nu           = cpp_result$nu,
     grad_spread  = cpp_result$grad_spread,
     max_abs_nu   = cpp_result$max_abs_nu,
-    lambda_sigma = lambda_sigma
+    n_mis        = cpp_result$n_mis,
+    lambda_sigma = lambda_sigma,
+    tol_cov      = tol_cov
   )
   warn_prism_diagnostics(diag)
 

@@ -15,14 +15,16 @@
 #'   If `NULL` (default), column-mean imputation is used as a fallback.
 #' @param lambda_sigma A non-negative numeric value giving the structural
 #'   weight of the covariance-matching term relative to the fidelity term.
-#'   `0` returns the initial imputation; larger values enforce the FIML-implied
-#'   structure more strongly. Because the covariance term carries a
-#'   \eqn{1/(n-1)} scaling, the default is \code{NULL}, which auto-scales to
-#'   \code{nrow(data) / 2}; pass an explicit number to override. Unlike the
-#'   deprecated `lambda`, this parameter changes the fixed points of the
-#'   optimization, not merely the step size.
-#' @param lr A numeric value for the initial gradient descent step size; the
-#'   Armijo backtracking line search adapts it automatically. Defaults to 0.01.
+#'   Both loss terms are normalized (fidelity per missing cell, covariance
+#'   discrepancy per matrix entry), so \code{lambda_sigma} is dimensionless
+#'   and comparable across sample sizes, variable counts, and missingness
+#'   rates. Defaults to 1; a sensitivity grid of 0.25-4 is recommended. `0`
+#'   returns the initial imputation; larger values enforce the FIML-implied
+#'   structure more strongly.
+#' @param lr A numeric value for the initial gradient descent step size.
+#'   Because both loss terms are normalized, the natural step scale is O(1);
+#'   the Armijo backtracking line search adapts it automatically. Defaults
+#'   to 1.
 #' @param tol_kkT A numeric value for the stationarity tolerance on the
 #'   projected-gradient (KKT residual) norm. Defaults to 1e-4.
 #' @param tol_cov A numeric value for the feasibility tolerance on the
@@ -34,27 +36,29 @@
 #' @param tol Deprecated; use `tol_cov`.
 #'
 #' @details
-#' The completed data solve the regularized projection
-#' \deqn{\min_X \frac{1}{2}\|M \odot (X - X^{(0)})\|_F^2 +
-#' \frac{\lambda_\Sigma}{2}\|\Sigma(X) - \Sigma_\text{FIML}\|_F^2}
+#' The completed data solve the regularized constrained projection
+#' \deqn{\min_X \frac{1}{2N_{\text{mis}}}\|M \odot (X - X^{(0)})\|_F^2 +
+#' \frac{\lambda_\Sigma}{2p^2}\|\Sigma(X) - \Sigma_\text{FIML}\|_F^2}
 #' subject to the observed cells being fixed and the column means of
-#' \eqn{X^{(0)}} preserved. Mean preservation is enforced structurally: the
-#' gradient of the missing cells is centered at zero within each column before
-#' every step, so column sums of the imputed values cannot drift during
-#' optimization. Columns with a single missing cell are frozen by this
-#' constraint.
+#' \eqn{X^{(0)}} preserved. Both terms are normalized — fidelity per missing
+#' cell and covariance discrepancy per matrix entry — so
+#' \eqn{\lambda_\Sigma} is a dimensionless trade-off parameter. Mean
+#' preservation is enforced structurally: the gradient of the missing cells
+#' is centered at zero within each column before every step, so column sums
+#' of the imputed values cannot drift during optimization. Columns with a
+#' single missing cell are frozen by this constraint.
 #'
 #' Convergence is certified by first-order (KKT) stationarity of the
 #' constrained problem, not by the raw gradient norm. The
 #' \code{prism_diagnostics} attribute on the returned data frame reports the
 #' KKT residual \code{r_kkT}, the covariance feasibility gap \code{feas_gap},
-#' the per-column Lagrange multiplier estimates \code{nu} of the mean
-#' constraints, and a \code{status} classifying the termination as
-#' \code{"converged_feasible"}, \code{"constrained_geometric_limit"} (a
-#' binding mean constraint; a genuine geometric limit rather than an early
-#' stop), \code{"geometric_infeasible"} (the target is unreachable given the
-#' frozen observed cells), or a non-stationary stop
-#' (\code{"stalled_line_search"} or \code{"max_iter_reached"}).
+#' and the per-column Lagrange multiplier estimates \code{nu} of the mean
+#' constraints. The \code{status} field classifies the termination as
+#' \code{"converged_feasible"} (stationary and within the covariance
+#' tolerance), \code{"converged"} (stationary with a nonzero covariance gap;
+#' the gap reflects the fidelity/structure trade-off, not target
+#' infeasibility), or a non-stationary stop (\code{"stalled_line_search"} or
+#' \code{"max_iter_reached"}).
 #'
 #' @return A data frame with FIML-consistent, covariance-projected imputed
 #'   values. Only the originally-missing cells are modified. The
@@ -75,7 +79,7 @@
 #' attr(result, "prism_diagnostics")
 #' }
 prism_fiml <- function(data, model, initial_imputation = NULL,
-                       lambda_sigma = NULL, lr = 0.01,
+                       lambda_sigma = NULL, lr = 1,
                        tol_kkT = 1e-4, tol_cov = 1e-6,
                        max_iter = 2000,
                        lambda = NULL, learning_rate = NULL, tol = NULL) {

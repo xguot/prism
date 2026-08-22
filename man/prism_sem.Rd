@@ -9,7 +9,7 @@ prism_sem(
   model,
   initial_imputation = NULL,
   lambda_sigma = NULL,
-  lr = 0.01,
+  lr = 1,
   tol_kkT = 1e-04,
   tol_cov = 1e-06,
   max_iter = 2000
@@ -30,14 +30,17 @@ If \code{NULL} (default), column-mean imputation is used as a fallback.}
 
 \item{lambda_sigma}{A non-negative numeric value giving the structural
 weight of the covariance-matching term relative to the fidelity term.
-\code{0} returns the initial imputation; larger values enforce the
-model-implied structure more strongly. Because the covariance term
-carries a \eqn{1/(n-1)} scaling, the default is \code{NULL}, which
-auto-scales to \code{nrow(data) / 2}; pass an explicit number to
-override.}
+Both loss terms are normalized (fidelity per missing cell, covariance
+discrepancy per matrix entry), so \code{lambda_sigma} is dimensionless
+and comparable across sample sizes, variable counts, and missingness
+rates. Defaults to 1; a sensitivity grid of 0.25-4 is recommended. \code{0}
+returns the initial imputation; larger values enforce the
+model-implied structure more strongly.}
 
-\item{lr}{A numeric value for the initial gradient descent step size; the
-Armijo backtracking line search adapts it automatically. Defaults to 0.01.}
+\item{lr}{A numeric value for the initial gradient descent step size.
+Because both loss terms are normalized, the natural step scale is O(1);
+the Armijo backtracking line search adapts it automatically. Defaults
+to 1.}
 
 \item{tol_kkT}{A numeric value for the stationarity tolerance on the
 projected-gradient (KKT residual) norm. Defaults to 1e-4.}

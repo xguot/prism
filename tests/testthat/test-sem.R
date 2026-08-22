@@ -55,7 +55,7 @@ test_that("prism_sem completes a CFA with structural paths", {
   df <- inject_missing_sem(sim_sem_complete(), c(40, 45, 50, 42, 38, 44))
   init <- col_mean_impute_sem(df)
   res <- prism_sem(df, sem_model(), initial_imputation = init,
-                   lambda_sigma = 50, max_iter = 3000)
+                   lambda_sigma = 5, max_iter = 3000)
 
   expect_false(anyNA(res))
   expect_equal(dim(res), dim(df))
@@ -68,8 +68,8 @@ test_that("prism_sem completes a CFA with structural paths", {
 
   d <- attr(res, "prism_diagnostics")
   expect_true(d$status %in% c(
-    "converged_feasible", "constrained_geometric_limit",
-    "geometric_infeasible", "stalled_line_search", "max_iter_reached"
+    "converged_feasible", "converged",
+    "stalled_line_search", "max_iter_reached"
   ))
   expect_true(d$converged)
   expect_length(d$nu, 6)
@@ -81,9 +81,9 @@ test_that("prism_sem accepts a pre-fitted lavaan object", {
   fit <- lavaan::sem(sem_model(), data = df, missing = "fiml")
 
   res_fit <- prism_sem(df, fit, initial_imputation = init,
-                       lambda_sigma = 50, max_iter = 3000)
+                       lambda_sigma = 5, max_iter = 3000)
   res_syn <- prism_sem(df, sem_model(), initial_imputation = init,
-                       lambda_sigma = 50, max_iter = 3000)
+                       lambda_sigma = 5, max_iter = 3000)
   expect_equal(res_fit, res_syn, tolerance = 1e-12)
 })
 

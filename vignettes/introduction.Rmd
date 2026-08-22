@@ -39,11 +39,14 @@ The pipeline has two steps:
 
 2. **Regularized Projection:** Starting from an initial imputation
    (user-supplied or column-mean fallback), run C++ gradient descent on the
-   dual objective
+   regularized constrained objective
 
-   $$f(X) = \frac{1}{2}\|M \odot (X - X^{(0)})\|_F^2 + \frac{\lambda_\Sigma}{2}\|\operatorname{Cov}(X) - \Sigma_{\text{FIML}}\|_F^2$$
+   $$f(X) = \frac{1}{2N_{\text{mis}}}\|M \odot (X - X^{(0)})\|_F^2 + \frac{\lambda_\Sigma}{2p^2}\|\operatorname{Cov}(X) - \Sigma_{\text{FIML}}\|_F^2$$
 
-   Only originally-missing cells are updated. The fidelity term anchors the
+   Only originally-missing cells are updated. Both terms are normalized —
+   fidelity per missing cell and covariance discrepancy per matrix entry —
+   so `lambda_sigma` is dimensionless and comparable across sample sizes,
+   variable counts, and missingness rates. The fidelity term anchors the
    solution to the nonparametric information in the initial imputation, and
    `lambda_sigma` trades fidelity against structure. The gradient of the
    missing cells is centered at zero within each column before every step,
@@ -87,14 +90,16 @@ result <- prism_fiml(df, model, initial_imputation = initial)
 
 ## Tuning Parameters
 
-- `lambda_sigma` (default `NULL`, auto-scaled to `nrow(data) / 2`):
-  Structural weight of the covariance-matching term relative to fidelity to
-  the initial imputation. The covariance term carries a 1/(n-1) scaling, so
-  the natural balance point grows with the sample size. `0` returns the
-  initial imputation unchanged; larger values enforce the FIML structure
-  more strongly.
-- `lr` (default 0.01): Initial gradient descent step size; the Armijo
-  backtracking line search adapts it automatically.
+- `lambda_sigma` (default 1): Structural weight of the covariance-matching
+  term relative to fidelity to the initial imputation. Both losses are
+  normalized (per missing cell and per covariance entry), so `lambda_sigma`
+  is dimensionless and comparable across sample sizes, variable counts, and
+  missingness rates; a sensitivity grid of 0.25–4 is recommended. `0`
+  returns the initial imputation unchanged; larger values enforce the FIML
+  structure more strongly.
+- `lr` (default 1): Initial gradient descent step size; the Armijo
+  backtracking line search adapts it automatically. With normalized losses
+  the natural step scale is O(1).
 - `tol_kkT` (default 1e-4): Stationarity tolerance on the projected-gradient
   (KKT residual) norm.
 - `tol_cov` (default 1e-6): Feasibility tolerance on the covariance gap to
@@ -112,9 +117,10 @@ attr(result, "prism_diagnostics")
 It reports the KKT residual `r_kkT`, the covariance feasibility gap
 `feas_gap`, per-column Lagrange multiplier estimates `nu` of the mean
 constraints, and a `status` classifying the termination as
-`converged_feasible`, `constrained_geometric_limit` (a binding mean
-constraint — a genuine geometric limit, not an early stop),
-`geometric_infeasible`, `stalled_line_search`, or `max_iter_reached`.
+`converged_feasible` (stationary and within the covariance tolerance),
+`converged` (stationary with a nonzero covariance gap — the gap reflects
+the fidelity/structure trade-off, not target infeasibility),
+`stalled_line_search`, or `max_iter_reached`.
 
 ## Multiple Imputation
 

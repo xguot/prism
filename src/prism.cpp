@@ -136,24 +136,29 @@ Rcpp::List constrain_covariance(const arma::mat& X_imp,
 }
 
 /*
- * v2 engine: true regularized projection with mean preservation.
+ * v2 engine: regularized constrained projection with mean preservation.
  *
- * Minimize the dual objective
+ * Minimize the regularized constrained objective
  *
- *   f(X) = 1/2 ||M o (X - X0)||_F^2
- *        + (lambda_sigma / 2) ||S(X) - Sigma_target||_F^2
+ *   f(X) = (1 / (2 N_mis)) ||M o (X - X0)||_F^2
+ *        + (lambda_sigma / (2 p^2)) ||S(X) - Sigma_target||_F^2
  *
  * over the originally-missing cells only (observed cells frozen), where
- * S(X) = (n - 1)^-1 Xc' Xc is the sample covariance of the column-centered
- * matrix Xc and Sigma_target is projected to the PSD cone first.  The first
- * term anchors X to the initial imputation X0 (nonparametric information);
- * the second term attracts the covariance toward the structural target.
- * lambda_sigma is a genuine trade-off parameter: its value changes the
- * fixed points of the iteration, not merely the step size.
+ * N_mis is the total number of missing cells, S(X) = (n - 1)^-1 Xc' Xc is
+ * the sample covariance of the column-centered matrix Xc, and Sigma_target
+ * is projected to the PSD cone first.  Both terms are normalized — fidelity
+ * per missing cell and covariance discrepancy per matrix entry — so
+ * lambda_sigma is dimensionless and comparable across sample sizes,
+ * variable counts, and missingness rates.  The first term anchors X to the
+ * initial imputation X0 (nonparametric information); the second term
+ * attracts the covariance toward the structural target.  lambda_sigma is a
+ * genuine trade-off parameter: its value changes the fixed points of the
+ * iteration, not merely the step size.
  *
  * Gradient on the free cells:
  *
- *   G = M o [ (X - X0) + lambda_sigma * (2 / (n - 1)) * Xc * R ],
+ *   G = M o [ (X - X0) / N_mis
+ *           + lambda_sigma * (2 / (p^2 (n - 1))) * Xc * R ],
  *   R = S(X) - Sigma_target.
  *
  * Mean-preserving projection: for every column j, the gradient of the
@@ -161,20 +166,24 @@ Rcpp::List constrain_covariance(const arma::mat& X_imp,
  * so every accepted step keeps sum_i X_ij over the missing cells constant and
  * hence preserves the column means of the initial imputation exactly.  This
  * is projected gradient descent on the affine mean constraint; the column
- * means of G are the negated Lagrange multipliers of that constraint.
+ * means of G are the negated Lagrange multipliers of that constraint and
+ * are returned as diagnostics.
  *
  * Stationarity (KKT) is certified by the projected-gradient norm ||Gtilde||_F:
  * at a constrained optimum the raw gradient is column-constant on the missing
  * cells of each column, so ||Gtilde||_F = 0 while ||G||_F may stay large.
- * The termination status distinguishes a feasible optimum, a constrained
- * geometric limit (binding mean constraints), a geometrically unreachable
- * target, and non-convergence (stall or max_iter).
+ * The termination status reports first-order stationarity ("converged", and
+ * "converged_feasible" when the covariance gap is within tol_cov) or a
+ * non-stationary stop ("stalled_line_search", "max_iter_reached").  The
+ * covariance gap at a stationary point is NOT interpreted as geometric
+ * infeasibility: in the regularized problem a nonzero gap simply reflects
+ * the fidelity/structure trade-off.
  *
  * Parameters:
  *   X_imp        n x p complete initial imputation
  *   mask         n x p 0/1 missingness indicator (1 = originally missing)
  *   Sigma_target p x p target covariance (projected to PSD internally)
- *   lambda_sigma structural weight of the covariance-matching term
+ *   lambda_sigma dimensionless structural weight of the covariance term
  *   lr           initial step size (Armijo backtracking adapts it)
  *   max_iter     maximum iterations
  *   tol_kkT      stationarity tolerance on the projected-gradient norm
@@ -228,15 +237,19 @@ Rcpp::List constrain_covariance_v2(
   const double c_armijo  = 1e-4;
   const double tau       = 0.5;
   const double eta_min   = 1e-12;
-  const double cov_scale = 2.0 / (n - 1.0);
+  const double n_mis     = arma::accu(mask);
+  const double cov_scale = 2.0 / ((p * p) * (n - 1.0));
+
+  /* per-cell fidelity scale; zero when there is nothing to impute */
+  const double fid_scale = (n_mis >= 1.0) ? (1.0 / n_mis) : 0.0;
 
   arma::mat X_opt = X_imp;
   arma::mat Xc    = X_opt.each_row() - arma::mean(X_opt, 0);
   arma::mat Sigma_curr = (Xc.t() * Xc) / (n - 1.0);
   arma::mat R = Sigma_curr - Sigma_fixed;
 
-  double f0   = 0.5 * arma::accu(arma::square(mask % (X_opt - X0)));
-  double fcov = 0.5 * arma::accu(arma::square(R));
+  double f0   = 0.5 * arma::accu(arma::square(mask % (X_opt - X0))) * fid_scale;
+  double fcov = 0.5 * arma::accu(arma::square(R)) / (p * p);
   double f    = f0 + lambda_sigma * fcov;
 
   arma::mat G, Gt;
@@ -249,72 +262,78 @@ Rcpp::List constrain_covariance_v2(
   bool converged = false;
   std::string status = "max_iter_reached";
 
-  for (int i = 0; i < max_iter; i++) {
-    Rcpp::checkUserInterrupt();
-    iter = i + 1;
+  if (n_mis < 1.0) {
+    /* nothing to impute: return the data unchanged */
+    converged = true;
+    r_kkT     = 0.0;
+  } else {
+    for (int i = 0; i < max_iter; i++) {
+      Rcpp::checkUserInterrupt();
+      iter = i + 1;
 
-    /* full gradient on the free cells */
-    G = mask % ((X_opt - X0) + lambda_sigma * cov_scale * Xc * R);
+      /* full gradient on the free cells */
+      G = mask % ((X_opt - X0) * fid_scale + lambda_sigma * cov_scale * Xc * R);
 
-    /* mean-preserving projection plus KKT diagnostics */
-    Gt = G;
-    r_kkT = 0.0;
-    for (int j = 0; j < p; j++) {
-      if (mis_idx[j].n_elem == 0) continue;
-      arma::vec gj(mis_idx[j].n_elem);
-      for (uword k = 0; k < mis_idx[j].n_elem; k++) {
-        gj(k) = G(mis_idx[j](k), j);
+      /* mean-preserving projection plus KKT diagnostics */
+      Gt = G;
+      r_kkT = 0.0;
+      for (int j = 0; j < p; j++) {
+        if (mis_idx[j].n_elem == 0) continue;
+        arma::vec gj(mis_idx[j].n_elem);
+        for (uword k = 0; k < mis_idx[j].n_elem; k++) {
+          gj(k) = G(mis_idx[j](k), j);
+        }
+        double gbar = arma::mean(gj);
+        for (uword k = 0; k < mis_idx[j].n_elem; k++) {
+          Gt(mis_idx[j](k), j) -= gbar;
+        }
+        nu(j)     = -gbar;
+        spread(j) = arma::stddev(gj);
+        arma::vec gjc = gj - gbar;
+        r_kkT += arma::accu(arma::square(gjc));
       }
-      double gbar = arma::mean(gj);
-      for (uword k = 0; k < mis_idx[j].n_elem; k++) {
-        Gt(mis_idx[j](k), j) -= gbar;
-      }
-      nu(j)     = -gbar;
-      spread(j) = arma::stddev(gj);
-      arma::vec gjc = gj - gbar;
-      r_kkT += arma::accu(arma::square(gjc));
-    }
-    r_kkT = std::sqrt(r_kkT);
+      r_kkT = std::sqrt(r_kkT);
 
-    if (r_kkT <= tol_kkT) {
-      converged = true;
-      break;
-    }
-
-    /* Armijo backtracking on the full objective along -Gt */
-    double eta = lr;
-    double g2  = r_kkT * r_kkT;
-    bool accepted = false;
-    arma::mat X_new, Xc_new, Sigma_new, R_new;
-    double f0_new, fcov_new, f_new;
-    while (eta >= eta_min) {
-      X_new     = X_opt - eta * Gt;
-      Xc_new    = X_new.each_row() - arma::mean(X_new, 0);
-      Sigma_new = (Xc_new.t() * Xc_new) / (n - 1.0);
-      R_new     = Sigma_new - Sigma_fixed;
-      f0_new    = 0.5 * arma::accu(arma::square(mask % (X_new - X0)));
-      fcov_new  = 0.5 * arma::accu(arma::square(R_new));
-      f_new     = f0_new + lambda_sigma * fcov_new;
-      if (f_new <= f - c_armijo * eta * g2) {
-        accepted = true;
+      if (r_kkT <= tol_kkT) {
+        converged = true;
         break;
       }
-      eta *= tau;
-    }
-    if (!accepted) {
-      status = "stalled_line_search";
-      break;
-    }
 
-    X_opt = X_new;
-    Xc    = Xc_new;
-    R     = R_new;
-    f0    = f0_new;
-    fcov  = fcov_new;
-    f     = f_new;
+      /* Armijo backtracking on the full objective along -Gt */
+      double eta = lr;
+      double g2  = r_kkT * r_kkT;
+      bool accepted = false;
+      arma::mat X_new, Xc_new, Sigma_new, R_new;
+      double f0_new, fcov_new, f_new;
+      while (eta >= eta_min) {
+        X_new     = X_opt - eta * Gt;
+        Xc_new    = X_new.each_row() - arma::mean(X_new, 0);
+        Sigma_new = (Xc_new.t() * Xc_new) / (n - 1.0);
+        R_new     = Sigma_new - Sigma_fixed;
+        f0_new    = 0.5 * arma::accu(arma::square(mask % (X_new - X0))) * fid_scale;
+        fcov_new  = 0.5 * arma::accu(arma::square(R_new)) / (p * p);
+        f_new     = f0_new + lambda_sigma * fcov_new;
+        if (f_new <= f - c_armijo * eta * g2) {
+          accepted = true;
+          break;
+        }
+        eta *= tau;
+      }
+      if (!accepted) {
+        status = "stalled_line_search";
+        break;
+      }
 
-    if (X_opt.has_nan() || X_opt.has_inf()) {
-      Rcpp::stop("Divergence detected: NaN or Inf produced during gradient descent.");
+      X_opt = X_new;
+      Xc    = Xc_new;
+      R     = R_new;
+      f0    = f0_new;
+      fcov  = fcov_new;
+      f     = f_new;
+
+      if (X_opt.has_nan() || X_opt.has_inf()) {
+        Rcpp::stop("Divergence detected: NaN or Inf produced during gradient descent.");
+      }
     }
   }
 
@@ -328,11 +347,10 @@ Rcpp::List constrain_covariance_v2(
   if (converged) {
     if (feas_gap <= tol_cov) {
       status = "converged_feasible";
-    } else if (max_abs_nu > tol_kkT) {
-      /* stationary with active mean constraints: a genuine geometric limit */
-      status = "constrained_geometric_limit";
     } else {
-      status = "geometric_infeasible";
+      /* stationary with a nonzero covariance gap: the regularized optimum
+       * balances fidelity against structure; no infeasibility is implied */
+      status = "converged";
     }
   }
 
@@ -348,6 +366,7 @@ Rcpp::List constrain_covariance_v2(
     Rcpp::Named("cov_term")    = fcov,
     Rcpp::Named("nu")          = nu,
     Rcpp::Named("grad_spread") = spread,
-    Rcpp::Named("max_abs_nu")  = max_abs_nu
+    Rcpp::Named("max_abs_nu")  = max_abs_nu,
+    Rcpp::Named("n_mis")       = n_mis
   );
 }

@@ -69,9 +69,9 @@ test_that("lambda_sigma trades fidelity against structure", {
   target <- lavaan::lavInspect(fit, "cov.ov")
 
   res_small <- prism_fiml(df, lgm_model(), initial_imputation = init,
-                          lambda_sigma = 0.05, max_iter = 3000)
+                          lambda_sigma = 0.5, max_iter = 3000)
   res_big <- prism_fiml(df, lgm_model(), initial_imputation = init,
-                        lambda_sigma = 50, max_iter = 3000)
+                        lambda_sigma = 10, max_iter = 3000)
 
   init_mat <- as.matrix(init[, time_cols])
   drift_small <- mean((as.matrix(res_small[, time_cols]) - init_mat)^2)
@@ -103,12 +103,13 @@ test_that("KKT diagnostics are attached and classify termination", {
   expect_true(is.list(d))
   for (field in c("status", "converged", "iterations", "r_kkT",
                   "feas_gap", "objective", "fidelity", "cov_term",
-                  "nu", "grad_spread", "max_abs_nu")) {
+                  "nu", "grad_spread", "max_abs_nu", "n_mis",
+                  "tol_cov")) {
     expect_true(field %in% names(d))
   }
   expect_true(d$status %in% c(
-    "converged_feasible", "constrained_geometric_limit",
-    "geometric_infeasible", "stalled_line_search", "max_iter_reached"
+    "converged_feasible", "converged",
+    "stalled_line_search", "max_iter_reached"
   ))
   expect_true(d$converged)
   expect_lte(d$r_kkT, 1e-3)
@@ -141,11 +142,12 @@ test_that("engine preserves missing-cell column sums and decreases objective", {
   expect_equal(colSums(r$X_refined * mask), colSums(X0 * mask),
                tolerance = 1e-10)
 
-  f_init <- 0.5 * sum((stats::cov(X0) - target)^2)
+  # normalized objective: fcov = 0.5 * ||R||^2 / p^2, fidelity 0 at X0
+  f_init <- (0.5 / 16) * sum((stats::cov(X0) - target)^2)
   expect_lte(r$objective, f_init + 1e-10)
   expect_true(r$status %in% c(
-    "converged_feasible", "constrained_geometric_limit",
-    "geometric_infeasible", "stalled_line_search", "max_iter_reached"
+    "converged_feasible", "converged",
+    "stalled_line_search", "max_iter_reached"
   ))
 })
 
@@ -244,13 +246,50 @@ test_that("prism_mi converts to mids", {
   expect_equal(nrow(mice::complete(mids, action = "long")), nrow(df) * 2)
 })
 
-test_that("default lambda_sigma auto-scales with sample size", {
+test_that("default lambda_sigma is 1 with normalized losses", {
   df <- inject_missing(sim_lgm_complete(100, seed = 8), c(0, 15, 20, 25))
   init <- col_mean_impute(df)
   res <- prism_fiml(df, lgm_model(), initial_imputation = init,
                     max_iter = 3000)
   d <- attr(res, "prism_diagnostics")
-  expect_equal(d$lambda_sigma, nrow(df) / 2)
+  expect_equal(d$lambda_sigma, 1)
+  expect_equal(d$n_mis, sum(is.na(df[, time_cols])))
+})
+
+test_that("nonzero covariance gap at stationarity is not mislabeled", {
+  df <- inject_missing(sim_lgm_complete(), c(0, 30, 40, 50))
+  init <- col_mean_impute(df)
+  res <- prism_fiml(df, lgm_model(), initial_imputation = init,
+                    lambda_sigma = 0.5, max_iter = 3000)
+  d <- attr(res, "prism_diagnostics")
+  expect_true(d$converged)
+  # a finite lambda_sigma leaves a nonzero gap; this must be reported as a
+  # regularized optimum, never as target infeasibility
+  expect_true(d$status %in% c("converged", "converged_feasible"))
+  expect_gt(d$feas_gap, 1e-4)
+})
+
+test_that("initial imputation observed cells are reset to raw data", {
+  df <- inject_missing(sim_lgm_complete(), c(0, 30, 40, 50))
+  init <- col_mean_impute(df)
+  init[1, "T0"] <- init[1, "T0"] + 100   # corrupt an observed cell
+
+  expect_warning(
+    res <- prism_fiml(df, lgm_model(), initial_imputation = init,
+                      lambda_sigma = 1, max_iter = 1000),
+    "observed values"
+  )
+  expect_equal(res[1, "T0"], df[1, "T0"], tolerance = 1e-12)
+  # anchors are computed after the reset, so the preserved means match the
+  # corrected initial imputation
+  corrected <- col_mean_impute(df)
+  expect_equal(colMeans(res[, time_cols]),
+               colMeans(corrected[, time_cols]), tolerance = 1e-8)
+})
+
+test_that("nearest_psd warns on a materially non-PSD input", {
+  bad <- matrix(c(1, 1.5, 1.5, 1), 2, 2)  # eigenvalue -0.5, not numerical noise
+  expect_warning(prism:::nearest_psd(bad), "PSD cone")
 })
 
 test_that("deprecated arguments warn and map to v2 parameters", {

@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**prism** is an R package that produces a completed dataset whose covariance structure matches the model-implied covariance from a FIML-estimated structural equation model (latent growth models, CFAs, and general SEMs). It fits the model via `lavaan`, extracts the structural target, and projects an initial imputation onto that target under a regularized dual objective: fidelity to the initial imputation (nonparametric, local information) is traded off against covariance matching (parametric structure) through `lambda_sigma`, while the column means of the initial imputation are preserved exactly. A C++ engine performs mean-preserving projected gradient descent with KKT convergence certification; `prism_mi` adds two-level proper multiple imputation.
+**prism** is an R package that produces a completed dataset whose covariance structure matches the model-implied covariance from a FIML-estimated structural equation model (latent growth models, CFAs, and general SEMs). It fits the model via `lavaan`, extracts the structural target, and projects an initial imputation onto that target under a regularized constrained objective: fidelity to the initial imputation (nonparametric, local information) is traded off against covariance matching (parametric structure) through `lambda_sigma`, while the column means of the initial imputation are preserved exactly. A C++ engine performs mean-preserving projected gradient descent with KKT convergence certification; `prism_mi` adds two-level proper multiple imputation.
 
 ## Installation
 
@@ -60,13 +60,13 @@ mi_data <- prism_mi(
 The pipeline executes in two phases:
 
 1. **FIML Estimation:** A structural equation model (growth model, CFA, or general SEM) is fit to the incomplete data via full-information maximum likelihood (`lavaan::growth` or `lavaan::sem`). The model-implied covariance matrix Σ_FIML of the observed variables is extracted as the structural target.
-2. **Regularized Projection:** An initial imputation (user-supplied or column-mean fallback) is projected toward the Σ_FIML target under the dual objective
+2. **Regularized Projection:** An initial imputation (user-supplied or column-mean fallback) is projected toward the Σ_FIML target under the regularized constrained objective
 
-$$f(X) = \frac{1}{2}\|M \odot (X - X^{(0)})\|_F^2 + \frac{\lambda_\Sigma}{2}\|\operatorname{Cov}(X) - \Sigma_{\text{FIML}}\|_F^2$$
+$$f(X) = \frac{1}{2N_{\text{mis}}}\|M \odot (X - X^{(0)})\|_F^2 + \frac{\lambda_\Sigma}{2p^2}\|\operatorname{Cov}(X) - \Sigma_{\text{FIML}}\|_F^2$$
 
-subject to the observed cells being frozen and the column means of X⁽⁰⁾ preserved. `lambda_sigma` is a genuine structural trade-off (it changes the fixed points, not the step size): `0` returns the initial imputation, large values enforce the FIML structure. The C++ engine computes the analytic gradient, centers the missing-cell gradient at zero within each column before every step (mean-preserving projected gradient descent), and uses Armijo backtracking on the full objective.
+subject to the observed cells being frozen and the column means of X⁽⁰⁾ preserved. Both loss terms are normalized — fidelity per missing cell, covariance discrepancy per matrix entry — so `lambda_sigma` is dimensionless and comparable across sample sizes, variable counts, and missingness rates (default 1; recommended sensitivity grid 0.25–4). `lambda_sigma` is a genuine structural trade-off (it changes the fixed points, not the step size): `0` returns the initial imputation, large values enforce the FIML structure. The C++ engine computes the analytic gradient, centers the missing-cell gradient at zero within each column before every step (mean-preserving projected gradient descent), and uses Armijo backtracking on the full objective.
 
-**Convergence certification.** The engine reports KKT diagnostics rather than only a covariance distance: the projected-gradient norm `r_kkT` (stationarity), the covariance feasibility gap `feas_gap`, and per-column Lagrange multiplier estimates `nu`. The `status` field distinguishes a feasible optimum (`converged_feasible`) from a constrained geometric limit with binding mean constraints (`constrained_geometric_limit`), an unreachable target (`geometric_infeasible`), and non-stationary stops (`stalled_line_search`, `max_iter_reached`).
+**Convergence certification.** The engine reports KKT diagnostics rather than only a covariance distance: the projected-gradient norm `r_kkT` (stationarity), the covariance feasibility gap `feas_gap`, and per-column Lagrange multiplier estimates `nu`. The `status` field classifies the termination as a feasible optimum (`converged_feasible`), a stationary point with a nonzero covariance gap (`converged` — the gap reflects the fidelity/structure trade-off, not target infeasibility), or a non-stationary stop (`stalled_line_search`, `max_iter_reached`).
 
 ## Scope
 
