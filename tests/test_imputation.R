@@ -1,13 +1,21 @@
 library(prism)
 library(lavaan)
 
-# Test Data Generation
+# Test Data Generation: linear growth with ~15% MCAR missingness per column.
+# The dataset is large enough for deterministic FIML convergence and for the
+# mean-preservation constraint to be non-degenerate (n_j > 1 per column).
 set.seed(42)
+n <- 40
+int <- rnorm(n, 0, 1)
+slp <- rnorm(n, 0.3, 0.4)
 df_miss <- data.frame(
-  T1 = c(1, 2, NA, 4, 5),
-  T2 = c(NA, 2, 3, 4, 6),
-  T3 = c(1, NA, 3, 4, 7)
+  T1 = int + rnorm(n, 0, 0.5),
+  T2 = int + slp + rnorm(n, 0, 0.5),
+  T3 = int + 2 * slp + rnorm(n, 0, 0.5)
 )
+df_miss$T1[sample.int(n, 6)] <- NA
+df_miss$T2[sample.int(n, 6)] <- NA
+df_miss$T3[sample.int(n, 6)] <- NA
 
 # Define a simple growth model
 model <- "
@@ -42,7 +50,7 @@ if (any(is.na(result2))) {
 }
 cat("Test 2 Passed.\n")
 
-cat("Running Test 3: Convergence with default lambda...\n")
+cat("Running Test 3: Backward compatibility of deprecated arguments...\n")
 result3 <- prism_fiml(df_miss, model, lambda = 1.0, tol = 1e-4)
 if (any(is.na(result3))) {
   stop("Test 3 Failed: Imputed dataset contains NAs.")
@@ -82,9 +90,23 @@ if (!grepl("numeric", err_msg2)) {
 }
 cat("Test 6 Passed.\n")
 
-cat("Running Test 7: Multiple imputation via parameter perturbation...\n")
+cat("Running Test 7: Two-level multiple imputation...\n")
 fit <- lavaan::growth(model, data = df_miss, missing = "fiml")
-mi_list <- prism_mi(df_miss, fit, m = 3)
+
+# stochastic hot-deck initializer (level-1 uncertainty)
+set.seed(11)
+hot_deck <- function(data) {
+  df <- data
+  for (j in seq_len(ncol(df))) {
+    x <- df[[j]]
+    na_idx <- is.na(x)
+    if (any(na_idx)) {
+      df[[j]][na_idx] <- sample(x[!na_idx], sum(na_idx), replace = TRUE)
+    }
+  }
+  df
+}
+mi_list <- prism_mi(df_miss, fit, m = 3, initializer = hot_deck)
 
 if (!inherits(mi_list, "prism_mi_list")) {
   stop("Test 7 Failed: Output is not of class 'prism_mi_list'.")
@@ -95,7 +117,7 @@ if (length(mi_list) != 3) {
 if (any(sapply(mi_list, function(x) any(is.na(x))))) {
   stop("Test 7 Failed: One or more MI datasets contain NAs.")
 }
-# Check that the imputations are not identical (parameter perturbation worked)
+# Check that the imputations are not identical (two-level draws worked)
 cov1 <- stats::cov(mi_list[[1]][, c("T1", "T2", "T3")])
 cov2 <- stats::cov(mi_list[[2]][, c("T1", "T2", "T3")])
 if (isTRUE(all.equal(cov1, cov2, tolerance = 1e-8))) {

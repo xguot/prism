@@ -347,7 +347,7 @@ run_iteration <- function(sim_id, params) {
   # missForest initial imputation toward it.
   time_sf <- system.time({
     imp_sf <- tryCatch(prism_fiml(df_miss, model = gcm_mod,
-                       initial_imputation = imp_mf, lambda = 1.0),
+                       initial_imputation = imp_mf, lambda_sigma = 1.0),
                        error = function(e) NULL)
     s_var_sf <- NA; s_se_sf <- NA; d_sf <- NA
     gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
@@ -375,7 +375,11 @@ run_iteration <- function(sim_id, params) {
     m_prism <- 20
     imp_smi_list <- tryCatch({
       fit_fiml_base <- growth(gcm_mod, data = df_miss, missing = "fiml")
-      prism_mi(df_miss, fit_fiml_base, m = m_prism, initial_imputation = imp_mf, lambda = 1.0)
+      # NOTE: 'initial_imputation' keeps the deterministic v1 level-1 draw;
+      # for the two-level v2 mechanism, pass `initializer = <stochastic
+      # imputer function>` instead (default is a bootstrap-weighted forest).
+      prism_mi(df_miss, fit_fiml_base, m = m_prism,
+               initial_imputation = imp_mf, lambda_sigma = 1.0)
     }, error = function(e) NULL)
 
     s_var_smi <- NA; s_se_smi <- NA; d_smi <- NA

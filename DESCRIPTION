@@ -1,12 +1,15 @@
 Package: prism
-Title: FIML Covariance Projection for Longitudinal Missing Data
-Version: 0.2.0
+Title: FIML Covariance Projection for Structural Equation Models with Missing Data
+Version: 0.3.0
 Authors@R: person("Xiyuan", "Guo", email = "tommyguo039@gmail.com", role = c("aut", "cre"))
-Description: Fits a latent growth model via FIML, extracts the model-implied
-    covariance matrix, and projects an initial imputation onto that structural
-    manifold using Lagrangian-constrained gradient descent. Supports both
-    single imputation (prism_fiml) and proper multiple imputation via
-    parameter perturbation (prism_mi).
+Description: Fits structural equation models (latent growth models, CFAs,
+    and general SEMs) via FIML, extracts the model-implied covariance
+    matrix, and projects an initial imputation onto that structural target
+    under a regularized dual objective that balances fidelity to the initial
+    imputation against covariance matching while preserving column means.
+    Supports single imputation (prism_fiml, prism_sem) and two-level proper
+    multiple imputation (prism_mi) with stochastic initializations and
+    parameter draws.
 License: MIT + file LICENSE
 SystemRequirements: C++17
 Encoding: UTF-8
@@ -18,8 +21,11 @@ Imports:
 Suggests:
     lavaan,
     mice,
+    missRanger,
     knitr,
-    rmarkdown
+    rmarkdown,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
 LinkingTo:
     Rcpp,
     RcppArmadillo

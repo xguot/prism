@@ -25,22 +25,31 @@ properties that FIML estimation preserves.
 
 The `prism` package bridges this gap: it produces a single completed dataset
 whose covariance structure matches the FIML model-implied covariance matrix,
-without variance attenuation.
+without variance attenuation. It supports latent growth models
+(`prism_fiml()`) and arbitrary single-group structural equation models
+(`prism_sem()`).
 
 ## How It Works
 
 The pipeline has two steps:
 
-1. **FIML Estimation:** Fit a latent growth model via `lavaan::growth()` with
+1. **FIML Estimation:** Fit a structural equation model (growth model, CFA,
+   or general SEM) via `lavaan::growth()` or `lavaan::sem()` with
    `missing = "fiml"`. Extract the model-implied covariance matrix Σ_FIML.
 
-2. **Lagrangian Projection:** Starting from an initial imputation (user-supplied
-   or column-mean fallback), run C++ gradient descent to minimize:
+2. **Regularized Projection:** Starting from an initial imputation
+   (user-supplied or column-mean fallback), run C++ gradient descent on the
+   dual objective
 
-   $$L(X) = \|\operatorname{cov}(X) - \Sigma_{\text{FIML}}\|_F^2$$
+   $$f(X) = \frac{1}{2}\|M \odot (X - X^{(0)})\|_F^2 + \frac{\lambda_\Sigma}{2}\|\operatorname{Cov}(X) - \Sigma_{\text{FIML}}\|_F^2$$
 
-   Only originally-missing cells are updated. The gradient is computed
-   analytically and masked so observed data stays frozen.
+   Only originally-missing cells are updated. The fidelity term anchors the
+   solution to the nonparametric information in the initial imputation, and
+   `lambda_sigma` trades fidelity against structure. The gradient of the
+   missing cells is centered at zero within each column before every step,
+   so the column means of the initial imputation are preserved exactly — the
+   completed data cannot drift in its first moments. Columns with a single
+   missing cell are frozen by this constraint.
 
 ## Basic Usage
 
@@ -78,8 +87,63 @@ result <- prism_fiml(df, model, initial_imputation = initial)
 
 ## Tuning Parameters
 
-- `lambda` (default 1.0): Penalty weight on the covariance constraint. Higher
-  values enforce the target structure more aggressively.
-- `learning_rate` (default 0.001): Gradient descent step size.
-- `tol` (default 1e-6): Convergence tolerance on the Frobenius distance.
+- `lambda_sigma` (default `NULL`, auto-scaled to `nrow(data) / 2`):
+  Structural weight of the covariance-matching term relative to fidelity to
+  the initial imputation. The covariance term carries a 1/(n-1) scaling, so
+  the natural balance point grows with the sample size. `0` returns the
+  initial imputation unchanged; larger values enforce the FIML structure
+  more strongly.
+- `lr` (default 0.01): Initial gradient descent step size; the Armijo
+  backtracking line search adapts it automatically.
+- `tol_kkT` (default 1e-4): Stationarity tolerance on the projected-gradient
+  (KKT residual) norm.
+- `tol_cov` (default 1e-6): Feasibility tolerance on the covariance gap to
+  the target.
 - `max_iter` (default 2000): Maximum gradient descent iterations.
+
+## Convergence Diagnostics
+
+Every completed dataset carries a `prism_diagnostics` attribute:
+
+```{r, eval = FALSE}
+attr(result, "prism_diagnostics")
+```
+
+It reports the KKT residual `r_kkT`, the covariance feasibility gap
+`feas_gap`, per-column Lagrange multiplier estimates `nu` of the mean
+constraints, and a `status` classifying the termination as
+`converged_feasible`, `constrained_geometric_limit` (a binding mean
+constraint — a genuine geometric limit, not an early stop),
+`geometric_infeasible`, `stalled_line_search`, or `max_iter_reached`.
+
+## Multiple Imputation
+
+`prism_mi()` implements two-level proper multiple imputation: each completed
+dataset starts from its own stochastic initial imputation (missing-value
+uncertainty; by default a bootstrap-weighted `missRanger` forest) and is
+projected onto a perturbed model-implied covariance drawn from the
+asymptotic sampling distribution of the FIML parameters (parameter
+uncertainty). It accepts any fitted `lavaan` object, including SEM fits.
+
+## Structural Equation Models
+
+`prism_sem()` applies the same regularized projection to any single-group
+SEM. Either model syntax or a pre-fitted `lavaan` object is accepted:
+
+```{r, eval = FALSE}
+model <- "
+  ind60 =~ x1 + x2 + x3
+  dem60 =~ y1 + y2 + y3 + y4
+  dem65 =~ y5 + y6 + y7 + y8
+  dem60 ~ ind60
+  dem65 ~ ind60 + dem60
+"
+df <- lavaan::PoliticalDemocracy
+df$x1[1:10] <- NA
+result <- prism_sem(df, model)
+```
+
+Ordinal, multi-group, and multilevel models are rejected with clear errors;
+multi-group data can be projected group by group. Model-implied means are
+not targeted: first moments are anchored to the initial imputation, exactly
+as in `prism_fiml()`.

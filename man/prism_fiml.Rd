@@ -2,16 +2,20 @@
 % Please edit documentation in R/prism_fiml.R
 \name{prism_fiml}
 \alias{prism_fiml}
-\title{FIML Covariance Projection}
+\title{FIML Covariance Projection (PRISM v2)}
 \usage{
 prism_fiml(
   data,
   model,
   initial_imputation = NULL,
-  lambda = 1,
-  learning_rate = 0.001,
-  tol = 1e-06,
-  max_iter = 2000
+  lambda_sigma = NULL,
+  lr = 0.01,
+  tol_kkT = 1e-04,
+  tol_cov = 1e-06,
+  max_iter = 2000,
+  lambda = NULL,
+  learning_rate = NULL,
+  tol = NULL
 )
 }
 \arguments{
@@ -23,27 +27,69 @@ prism_fiml(
 the longitudinal subset of \code{data}, containing initial imputed values.
 If \code{NULL} (default), column-mean imputation is used as a fallback.}
 
-\item{lambda}{A numeric value specifying the per-observation penalty weight
-for covariance matching. Defaults to 1.0.}
+\item{lambda_sigma}{A non-negative numeric value giving the structural
+weight of the covariance-matching term relative to the fidelity term.
+\code{0} returns the initial imputation; larger values enforce the FIML-implied
+structure more strongly. Because the covariance term carries a
+\eqn{1/(n-1)} scaling, the default is \code{NULL}, which auto-scales to
+\code{nrow(data) / 2}; pass an explicit number to override. Unlike the
+deprecated \code{lambda}, this parameter changes the fixed points of the
+optimization, not merely the step size.}
 
-\item{learning_rate}{A numeric value for the gradient descent step size.
-Defaults to 0.001.}
+\item{lr}{A numeric value for the initial gradient descent step size; the
+Armijo backtracking line search adapts it automatically. Defaults to 0.01.}
 
-\item{tol}{A numeric value for the convergence tolerance (Frobenius norm).
-Defaults to 1e-6.}
+\item{tol_kkT}{A numeric value for the stationarity tolerance on the
+projected-gradient (KKT residual) norm. Defaults to 1e-4.}
+
+\item{tol_cov}{A numeric value for the feasibility tolerance on the
+covariance gap to the target. Defaults to 1e-6.}
 
 \item{max_iter}{An integer specifying the maximum number of iterations
 for the gradient descent projection. Defaults to 2000.}
+
+\item{lambda}{Deprecated; use \code{lambda_sigma}.}
+
+\item{learning_rate}{Deprecated; use \code{lr}.}
+
+\item{tol}{Deprecated; use \code{tol_cov}.}
 }
 \value{
 A data frame with FIML-consistent, covariance-projected imputed
-values. Only the originally-missing cells are modified.
+values. Only the originally-missing cells are modified. The
+\code{prism_diagnostics} attribute contains the optimization diagnostics.
 }
 \description{
 Fit a latent growth model via FIML, extract the model-implied
 covariance matrix, and project an initial imputation onto that structural
-manifold using Lagrangian-constrained gradient descent. Only
-originally-missing cells are modified; observed data is held fixed.
+target under the PRISM v2 regularized objective. Fidelity to the initial
+imputation (nonparametric, local information) is traded off against
+covariance matching (parametric structure) through \code{lambda_sigma},
+while the column means of the initial imputation are preserved exactly.
+Only originally-missing cells are modified; observed data are held fixed.
+}
+\details{
+The completed data solve the regularized projection
+\deqn{\min_X \frac{1}{2}\|M \odot (X - X^{(0)})\|_F^2 +
+\frac{\lambda_\Sigma}{2}\|\Sigma(X) - \Sigma_\text{FIML}\|_F^2}
+subject to the observed cells being fixed and the column means of
+\eqn{X^{(0)}} preserved. Mean preservation is enforced structurally: the
+gradient of the missing cells is centered at zero within each column before
+every step, so column sums of the imputed values cannot drift during
+optimization. Columns with a single missing cell are frozen by this
+constraint.
+
+Convergence is certified by first-order (KKT) stationarity of the
+constrained problem, not by the raw gradient norm. The
+\code{prism_diagnostics} attribute on the returned data frame reports the
+KKT residual \code{r_kkT}, the covariance feasibility gap \code{feas_gap},
+the per-column Lagrange multiplier estimates \code{nu} of the mean
+constraints, and a \code{status} classifying the termination as
+\code{"converged_feasible"}, \code{"constrained_geometric_limit"} (a
+binding mean constraint; a genuine geometric limit rather than an early
+stop), \code{"geometric_infeasible"} (the target is unreachable given the
+frozen observed cells), or a non-stationary stop
+(\code{"stalled_line_search"} or \code{"max_iter_reached"}).
 }
 \examples{
 \dontrun{
@@ -55,6 +101,7 @@ df <- data.frame(
   T2 = c(2.1, 2.5, NA, 4.0),
   T3 = c(3.0, 3.3, 4.1, NA)
 )
-prism_fiml(df, model)
+result <- prism_fiml(df, model)
+attr(result, "prism_diagnostics")
 }
 }
