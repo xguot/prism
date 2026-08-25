@@ -35,6 +35,15 @@ set.seed(1)
 res_gcm <- run_iteration(1, params_gcm)
 res_gcm <- check_schema(res_gcm, "GCM", "GCM")
 
+# GCM MAR realized missingness follows the designed linear-accumulation
+# formula once drop targets are restricted to still-observed rows
+m_step <- round(2 * params_gcm$n * params_gcm$miss / (t_points - 1))
+expected_miss <- sum(vapply(1:(t_points - 1), function(t) t * m_step * (t_points - t),
+                           numeric(1))) / (params_gcm$n * t_points)
+cat(sprintf("GCM MAR actual_miss = %.3f (expected %.3f)\n",
+            res_gcm$actual_miss[1], expected_miss))
+stopifnot(abs(res_gcm$actual_miss[1] - expected_miss) < 0.01)
+
 # mean-preservation invariant: completed PRISM data must not drift from X0
 prism_row <- res_gcm[res_gcm$method == "PRISM", ]
 stopifnot(!is.na(prism_row$delta_mu))

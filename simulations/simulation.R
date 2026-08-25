@@ -193,25 +193,23 @@ apply_missingness <- function(df, rate, mech) {
 
   if (mech == "MAR") {
     # Deterministic threshold MAR (Tang & Tong 2025 convention)
-    # Low values on T_t cause missingness on T_{t+1}
+    # Low values on T_t cause missingness on T_{t+1} (monotone dropout).
+    # Drop budget accumulates linearly: t * miss_n_per_step rows at step t.
+    # With T = 4 the realized cellwise rate is 10 * miss_n_per_step / (4n),
+    # i.e. about (5/3) * rate; actual_miss is recorded per replication.
     miss_n_per_step <- round(2 * n * rate / (t_points - 1))
 
     for (t in 1:(t_points - 1)) {
-      # Identify subjects not already dropped at previous timepoints
+      # Select drop targets only among subjects still observed at time t:
+      # subjects dropped at earlier steps already carry NA and must not
+      # consume this step's drop budget
       obs_idx <- which(!is.na(df_miss[, t]))
       if (length(obs_idx) > 0) {
-        # Sort observed values: smallest values are at the end if decreasing=TRUE?
-        # Actually, image says: order(..., decreasing=TRUE), target_rows <- (n - t*miss_n + 1):n
-        # That targets the smallest values.
-        order_idx <- order(df_miss[, t], decreasing = TRUE)
-        # Calculate how many to drop this step (linear accumulation)
-        target_rows <- (n - t * miss_n_per_step + 1):n
-        target_rows <- target_rows[target_rows > 0 & target_rows <= n]
-
-        if (length(target_rows) > 0) {
-          drop_idx <- order_idx[target_rows]
-          df_miss[drop_idx, (t + 1):t_points] <- NA # Dropout: once missing, stay missing
-        }
+        # smallest values of T_t first, restricted to the still-observed rows
+        order_idx <- obs_idx[order(df_miss[obs_idx, t], decreasing = TRUE)]
+        n_take    <- min(t * miss_n_per_step, length(obs_idx))
+        drop_idx  <- tail(order_idx, n_take)
+        df_miss[drop_idx, (t + 1):t_points] <- NA # Dropout: once missing, stay missing
       }
     }
   } else if (mech == "MNAR") {
