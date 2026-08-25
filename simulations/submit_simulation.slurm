@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH -p standard
 #SBATCH -c 8
-#SBATCH -t 12:00:00
-#SBATCH --array=1-192
+#SBATCH -t 18:00:00
+#SBATCH --array=1-384
 #SBATCH -A tongx
 #SBATCH -J prism_prod
 #SBATCH -o simulations/logs/prod_%A_%a.out
@@ -17,14 +17,13 @@ module load R/4.4.1
 # Local R library (no root access on Rivanna)
 export R_LIBS_USER=~/R/rivanna-lib
 
-# Ensure log directory exists
-mkdir -p simulations/logs
-
-# Neutralize multi-threaded BLAS to prevent contention during R-level parallelization
+# Log directory must exist BEFORE the job starts (sbatch resolves -o/-e at
+# launch time); submit from the repository root
 export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 export OPENBLAS_NUM_THREADS=1
 
 # Execute the simulation for the current array task (condition)
+# Grid: 2 models x 6 N x 4 miss x 4 dist x 2 mech = 384 conditions
 echo "Starting prism Production Task ${SLURM_ARRAY_TASK_ID} on $(hostname)..."
 Rscript simulations/simulation.R

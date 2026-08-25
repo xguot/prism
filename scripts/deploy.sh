@@ -82,8 +82,11 @@ echo "$TEST_OUT"
 
 if echo "$TEST_OUT" | grep -q "SUCCESS"; then
     echo "✓ Test passed."
-    
+
     echo "-> [5/5] Submitting simulation array..."
+    # sbatch resolves the -o/-e log paths at launch time; the directory
+    # must already exist when the job is submitted
+    mkdir -p simulations/logs
     sbatch simulations/submit_simulation.slurm
 else
     echo "ERROR: Manual test failed. Array submission aborted."
