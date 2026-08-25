@@ -17,3 +17,4 @@ simulation.log
 manuscript/build/
 *.aux
 *.log
+libs/
