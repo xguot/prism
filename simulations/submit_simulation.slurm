@@ -33,9 +33,20 @@ module load R/4.4.1
 # by scripts/rsync.sh.
 unset R_LIBS_USER R_LIBS_SITE R_LIBS || true
 
-# Run from the repository root regardless of the submit directory; the -o/-e
-# log paths are resolved at submission time from the submit directory.
-cd "$(dirname "$0")/.."
+# Slurm starts the job in the directory sbatch was invoked from (the
+# repository root in the rsync workflow).  SLURM_SUBMIT_DIR points there
+# regardless of how the script path is resolved, so use it when present.
+if [ -n "${SLURM_SUBMIT_DIR:-}" ]; then
+  cd "${SLURM_SUBMIT_DIR}"
+fi
+
+# Fail fast with a clear message instead of an R fatal error if the
+# repository layout is not where expected
+if [ ! -f simulations/simulation.R ]; then
+  echo "ERROR: simulations/simulation.R not found. Submit from the repository"
+  echo "root: ssh rivanna \"cd ~/scratch/prism && sbatch simulations/submit_simulation.slurm\""
+  exit 1
+fi
 
 # Neutralize multi-threaded BLAS to prevent contention during R-level
 # parallelization across the 8 allocated cores
