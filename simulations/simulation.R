@@ -855,6 +855,13 @@ array_id <- as.numeric(Sys.getenv("SLURM_ARRAY_TASK_ID"))
 if (!is.na(array_id) && array_id >= 1 && array_id <= total_conditions) {
   current_conditions <- conditions[array_id, , drop = FALSE]
   output_file <- sprintf("sim_results/prod_results_%d.rds", array_id)
+} else if (!is.na(array_id)) {
+  stop(sprintf(
+    "SLURM_ARRAY_TASK_ID = %d is outside the grid of %d conditions. ",
+    "Update the --array directive in simulations/submit_simulation.slurm ",
+    "to match the condition grid in simulations/simulation.R.",
+    array_id, total_conditions
+  ))
 } else {
   current_conditions <- conditions
   output_file <- "sim_results/prod_results.rds"
