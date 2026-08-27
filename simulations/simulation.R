@@ -194,10 +194,16 @@ apply_missingness <- function(df, rate, mech) {
   if (mech == "MAR") {
     # Deterministic threshold MAR (Tang & Tong 2025 convention)
     # Low values on T_t cause missingness on T_{t+1} (monotone dropout).
-    # Drop budget accumulates linearly: t * miss_n_per_step rows at step t.
-    # With T = 4 the realized cellwise rate is 10 * miss_n_per_step / (4n),
-    # i.e. about (5/3) * rate; actual_miss is recorded per replication.
-    miss_n_per_step <- round(2 * n * rate / (t_points - 1))
+    # The per-step budget accumulates linearly (t * miss_n_per_step rows at
+    # step t) and is calibrated so the realized cellwise rate equals the
+    # nominal `rate` at every grid point:
+    #   sum_t [t * miss_n_per_step * (T - t)] = rate * n * T,
+    # i.e. miss_n_per_step = rate * n * T / sum_t t * (T - t); for T = 4 the
+    # denominator is 10.  Without the calibration the realized rate is
+    # (5/3) * rate and miss = 0.30 destroys the last wave entirely.
+    miss_n_per_step <- round(
+      rate * n * t_points / sum((1:(t_points - 1)) * ((t_points - 1):1))
+    )
 
     for (t in 1:(t_points - 1)) {
       # Select drop targets only among subjects still observed at time t:
@@ -521,6 +527,13 @@ run_iteration_gcm <- function(sim_id, params) {
   time_mf <- system.time({
     imp_mf <- tryCatch(missForest::missForest(df_miss, verbose = FALSE)$ximp,
                        error = function(e) NULL)
+    # missForest drops columns it cannot model (e.g. 100% missing); treat a
+    # dropped-column result as an imputation failure instead of indexing
+    # columns that do not exist downstream
+    if (!is.null(imp_mf) &&
+        !all(paste0("T", 1:t_points) %in% names(imp_mf))) {
+      imp_mf <- NULL
+    }
     s_var_mf <- NA; s_se_mf <- NA; d_mf <- NA
     gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
     gs <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
