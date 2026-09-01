@@ -78,7 +78,7 @@ subject to the observed cells being frozen and each column mean fixed to its tar
 
 ## Why prism
 
-FIML estimates parameters correctly under MAR but does not fill in missing values. `lavPredict(type="ov")` (conditional expectations) attenuates variance by 40–60%. prism produces a completed dataset whose structural parameters match the FIML model without variance attenuation — enabling downstream analyses that require complete data.
+FIML estimates parameters correctly under MAR but does not fill in missing values. `lavPredict(type="ov")` (conditional expectations) shrinks the marginal variances of the completed variables, while nonparametric imputers (missForest, MICE) leave the completed covariance far from the model-implied structure. prism produces a completed dataset whose means and covariance track the FIML model-implied moments by construction (a certified joint (mu, Sigma) projection) — second only to FIML itself on covariance recovery in the simulation grid and clearly ahead of the initialiser. One trade-off to keep in mind: refitting the model on the completed data recovers variance parameters better than refitting on the initialiser, but still short of FIML's own recovery, because fidelity to the initial imputation and the frozen observed cells bound what the projection can achieve. `lambda_sigma` dials that trade-off.
 
 ## Citation
 

@@ -17,6 +17,12 @@ hr <- function(label) {
   cat(strrep("=", 90), "\n\n", sep = "")
 }
 
+# Pooled summaries use the median and MAD (SD-consistent) instead of the
+# mean and SD: in the heavy-tail cells (SEM x Outlier / Lognormal) a small
+# number of degenerate fits produces estimates many orders of magnitude
+# from the truth, and mean-based pooling is dominated by them.  Median/MAD
+# describe the bulk of the replications.  Counts and timing keep their
+# original (non-robust) definitions.
 compute_metrics <- function(results, param, true_val,
                            ec_map = est_cols, sc_map = se_cols) {
   ec <- ec_map[param]
@@ -29,15 +35,15 @@ compute_metrics <- function(results, param, true_val,
   out <- valid %>%
     group_by(method) %>%
     summarise(
-      n_converged   = n(),
-      mean_estimate = mean(.data[[ec]], na.rm = TRUE),
-      empirical_se  = sd(.data[[ec]], na.rm = TRUE),
-      avg_model_se  = if (has_se) mean(.data[[sc]], na.rm = TRUE) else NA_real_,
-      .groups       = "drop"
+      n_converged      = n(),
+      median_estimate  = stats::median(.data[[ec]], na.rm = TRUE),
+      mad_est          = stats::mad(.data[[ec]], na.rm = TRUE),
+      avg_model_se     = if (has_se) mean(.data[[sc]], na.rm = TRUE) else NA_real_,
+      .groups          = "drop"
     ) %>%
     mutate(
-      bias     = mean_estimate - true_val,
-      se_ratio = if (has_se) avg_model_se / empirical_se else NA_real_,
+      bias     = median_estimate - true_val,
+      se_ratio = if (has_se) avg_model_se / mad_est else NA_real_,
       param    = param
     )
 
@@ -119,7 +125,7 @@ sem_all_params <- do.call(rbind, lapply(sem_names, function(pn) {
 # ══════════════════════════════════════════════════════════════════════════════
 # TABLE 0 — Convergence, Empirical SE, Model SE, SE Ratio (all parameters)
 # ══════════════════════════════════════════════════════════════════════════════
-hr("TABLE 0G — GCM: Convergence, Empirical SE, Model SE, SE Ratio")
+hr("TABLE 0G — GCM: Median Estimate, MAD, Model SE, SE Ratio")
 
 for (pn in param_names) {
   cat(sprintf("\n--- %s (truth = %.0f) ---\n", pn, beta_true[pn]))
@@ -127,7 +133,7 @@ for (pn in param_names) {
   print(as.data.frame(sm), row.names = FALSE)
 }
 
-hr("TABLE 0S — SEM: Convergence, Empirical SE, Model SE, SE Ratio")
+hr("TABLE 0S — SEM: Median Estimate, MAD, Model SE, SE Ratio")
 
 for (pn in sem_names) {
   cat(sprintf("\n--- %s (truth = %.2f) ---\n", pn, sem_true[pn]))
@@ -144,11 +150,11 @@ hr("TABLE 1 — Frobenius Distance to True Covariance (lower = better)")
 prod %>%
   group_by(model, dist, mech, method) %>%
   summarise(
-    Frobenius = mean(f_dist, na.rm = TRUE),
-    SD        = sd(f_dist, na.rm = TRUE),
+    Frobenius = stats::median(f_dist, na.rm = TRUE),
+    MAD       = stats::mad(f_dist, na.rm = TRUE),
     .groups   = "drop"
   ) %>%
-  mutate(Display = sprintf("%.2f (%.2f)", Frobenius, SD)) %>%
+  mutate(Display = sprintf("%.2f (%.2f)", Frobenius, MAD)) %>%
   select(model, dist, mech, method, Display) %>%
   pivot_wider(names_from = mech, values_from = Display) %>%
   arrange(model, dist, method) %>%
@@ -163,7 +169,7 @@ hr("TABLE 2 — Frobenius Distance by Sample Size (MAR only)")
 prod %>%
   filter(mech == "MAR") %>%
   group_by(model, N, dist, method) %>%
-  summarise(Frobenius = mean(f_dist, na.rm = TRUE), .groups = "drop") %>%
+  summarise(Frobenius = stats::median(f_dist, na.rm = TRUE), .groups = "drop") %>%
   mutate(Display = sprintf("%.2f", Frobenius)) %>%
   select(model, N, dist, method, Display) %>%
   pivot_wider(names_from = N, values_from = Display, names_prefix = "N=") %>%
@@ -180,7 +186,7 @@ prod %>%
   filter(mech == "MAR") %>%
   mutate(miss_pct = sprintf("%.0f%%", miss * 100)) %>%
   group_by(model, miss_pct, dist, method) %>%
-  summarise(Frobenius = mean(f_dist, na.rm = TRUE), .groups = "drop") %>%
+  summarise(Frobenius = stats::median(f_dist, na.rm = TRUE), .groups = "drop") %>%
   mutate(Display = sprintf("%.2f", Frobenius)) %>%
   select(model, miss_pct, dist, method, Display) %>%
   pivot_wider(names_from = miss_pct, values_from = Display) %>%
@@ -194,20 +200,20 @@ prod %>%
 for (pn in param_names) {
   tv <- beta_true[pn]
   title <- if (abs(tv) < 1e-12)
-    sprintf("TABLE 4%s — Raw Bias: %s (truth = 0)", pn, param_labels[pn])
+    sprintf("TABLE 4%s — Raw Bias (median (MAD)): %s (truth = 0)", pn, param_labels[pn])
   else
-    sprintf("TABLE 4%s — Relative Bias: %s (%%, truth = %.0f)", pn, param_labels[pn], tv)
+    sprintf("TABLE 4%s — Relative Bias (median (MAD)): %s (%%, truth = %.0f)", pn, param_labels[pn], tv)
   hr(title)
 
   all_params %>%
     filter(param == pn, mech == "MAR") %>%
     group_by(dist, method) %>%
     summarise(
-      M  = mean(relbias, na.rm = TRUE),
-      SD = sd(relbias, na.rm = TRUE),
+      M   = stats::median(relbias, na.rm = TRUE),
+      MAD = stats::mad(relbias, na.rm = TRUE),
       .groups = "drop"
     ) %>%
-    mutate(Display = sprintf("%+.2f (%.2f)", M, SD)) %>%
+    mutate(Display = sprintf("%+.2f (%.2f)", M, MAD)) %>%
     select(dist, method, Display) %>%
     pivot_wider(names_from = dist, values_from = Display) %>%
     arrange(method) %>%
@@ -217,17 +223,17 @@ for (pn in param_names) {
 
 for (pn in sem_names) {
   tv <- sem_true[pn]
-  hr(sprintf("TABLE 4%s — Relative Bias: %s (%%, truth = %.2f)", pn, sem_labels[pn], tv))
+  hr(sprintf("TABLE 4%s — Relative Bias (median (MAD)): %s (%%, truth = %.2f)", pn, sem_labels[pn], tv))
 
   sem_all_params %>%
     filter(param == pn, mech == "MAR") %>%
     group_by(dist, method) %>%
     summarise(
-      M  = mean(relbias, na.rm = TRUE),
-      SD = sd(relbias, na.rm = TRUE),
+      M   = stats::median(relbias, na.rm = TRUE),
+      MAD = stats::mad(relbias, na.rm = TRUE),
       .groups = "drop"
     ) %>%
-    mutate(Display = sprintf("%+.2f (%.2f)", M, SD)) %>%
+    mutate(Display = sprintf("%+.2f (%.2f)", M, MAD)) %>%
     select(dist, method, Display) %>%
     pivot_wider(names_from = dist, values_from = Display) %>%
     arrange(method) %>%
@@ -240,15 +246,15 @@ for (pn in sem_names) {
 # ══════════════════════════════════════════════════════════════════════════════
 for (pn in param_names) {
   tv <- beta_true[pn]
-  hr(sprintf("TABLE 5%s — MSE: %s (truth = %.0f)", pn, param_labels[pn], tv))
+  hr(sprintf("TABLE 5%s — Median-based MSE: %s (truth = %.0f)", pn, param_labels[pn], tv))
 
   all_params %>%
     filter(param == pn, mech == "MAR") %>%
     group_by(dist, method) %>%
     summarise(
-      bias_raw = mean(est, na.rm = TRUE) - tv,
-      ESE      = sd(est, na.rm = TRUE),
-      MSE      = bias_raw^2 + ESE^2,
+      bias_med = stats::median(est, na.rm = TRUE) - tv,
+      MAD      = stats::mad(est, na.rm = TRUE),
+      MSE      = bias_med^2 + MAD^2,
       .groups  = "drop"
     ) %>%
     mutate(Display = sprintf("%.4f", MSE)) %>%
@@ -261,15 +267,15 @@ for (pn in param_names) {
 
 for (pn in sem_names) {
   tv <- sem_true[pn]
-  hr(sprintf("TABLE 5%s — MSE: %s (truth = %.2f)", pn, sem_labels[pn], tv))
+  hr(sprintf("TABLE 5%s — Median-based MSE: %s (truth = %.2f)", pn, sem_labels[pn], tv))
 
   sem_all_params %>%
     filter(param == pn, mech == "MAR") %>%
     group_by(dist, method) %>%
     summarise(
-      bias_raw = mean(est, na.rm = TRUE) - tv,
-      ESE      = sd(est, na.rm = TRUE),
-      MSE      = bias_raw^2 + ESE^2,
+      bias_med = stats::median(est, na.rm = TRUE) - tv,
+      MAD      = stats::mad(est, na.rm = TRUE),
+      MSE      = bias_med^2 + MAD^2,
       .groups  = "drop"
     ) %>%
     mutate(Display = sprintf("%.4f", MSE)) %>%
@@ -288,7 +294,7 @@ hr("TABLE 6 — Outlier Impact: Delta Frobenius (Normal -> Outlier, MAR)")
 prod %>%
   filter(mech == "MAR", dist %in% c("Normal", "Outlier")) %>%
   group_by(model, dist, method) %>%
-  summarise(Frob = mean(f_dist, na.rm = TRUE), .groups = "drop") %>%
+  summarise(Frob = stats::median(f_dist, na.rm = TRUE), .groups = "drop") %>%
   pivot_wider(names_from = dist, values_from = Frob) %>%
   mutate(
     Delta   = Outlier - Normal,
@@ -321,24 +327,24 @@ prod %>%
 # ══════════════════════════════════════════════════════════════════════════════
 # TABLE 8 — Relative Bias Heatmap Summary (MAR, pooled across conditions)
 # ══════════════════════════════════════════════════════════════════════════════
-hr("TABLE 8G — Relative Bias Summary (GCM, MAR, pooled across N x miss)")
+hr("TABLE 8G — Median Relative Bias Summary (GCM, MAR, pooled across N x miss)")
 
 all_params %>%
   filter(mech == "MAR") %>%
   group_by(param, method) %>%
-  summarise(RelBias = mean(relbias, na.rm = TRUE), .groups = "drop") %>%
+  summarise(RelBias = stats::median(relbias, na.rm = TRUE), .groups = "drop") %>%
   pivot_wider(names_from = param, values_from = RelBias) %>%
   mutate(across(where(is.numeric), ~ sprintf("%+.1f%%", .x))) %>%
   arrange(method) %>%
   as.data.frame() %>%
   print(row.names = FALSE)
 
-hr("TABLE 8S — Relative Bias Summary (SEM, MAR, pooled across N x miss)")
+hr("TABLE 8S — Median Relative Bias Summary (SEM, MAR, pooled across N x miss)")
 
 sem_all_params %>%
   filter(mech == "MAR") %>%
   group_by(param, method) %>%
-  summarise(RelBias = mean(relbias, na.rm = TRUE), .groups = "drop") %>%
+  summarise(RelBias = stats::median(relbias, na.rm = TRUE), .groups = "drop") %>%
   pivot_wider(names_from = param, values_from = RelBias) %>%
   mutate(across(where(is.numeric), ~ sprintf("%+.1f%%", .x))) %>%
   arrange(method) %>%
@@ -348,21 +354,23 @@ sem_all_params %>%
 # ══════════════════════════════════════════════════════════════════════════════
 # TABLE 9 — PRISM Diagnostics and Mean Drift (MAR, pooled across conditions)
 # ══════════════════════════════════════════════════════════════════════════════
-hr("TABLE 9 — PRISM Diagnostics: KKT Residual, Feasibility Gap, Fidelity (MAR)")
+hr("TABLE 9 — PRISM Diagnostics: KKT Residual, Feasibility Gap, Fidelity, Certification (MAR)")
 
 prod %>%
   filter(mech == "MAR", method %in% c("PRISM", "PRISM_MI")) %>%
   group_by(model, method, dist) %>%
   summarise(
-    r_kkT    = mean(r_kkT, na.rm = TRUE),
-    feas_gap = mean(feas_gap, na.rm = TRUE),
-    fidelity = mean(fidelity, na.rm = TRUE),
+    r_kkT    = stats::median(r_kkT, na.rm = TRUE),
+    feas_gap = stats::median(feas_gap, na.rm = TRUE),
+    fidelity = stats::median(fidelity, na.rm = TRUE),
+    frac_converged = mean(status == "converged", na.rm = TRUE),
     .groups  = "drop"
   ) %>%
   mutate(
-    r_kkT    = sprintf("%.2e", r_kkT),
-    feas_gap = sprintf("%.3f", feas_gap),
-    fidelity = sprintf("%.3f", fidelity)
+    r_kkT          = sprintf("%.2e", r_kkT),
+    feas_gap       = sprintf("%.3f", feas_gap),
+    fidelity       = sprintf("%.3f", fidelity),
+    frac_converged = sprintf("%.2f", frac_converged)
   ) %>%
   arrange(model, method, dist) %>%
   as.data.frame() %>%
@@ -377,8 +385,8 @@ prod %>%
   filter(mech == "MAR") %>%
   group_by(model, method) %>%
   summarise(
-    delta_mu  = mean(delta_mu, na.rm = TRUE),
-    mean_bias = mean(mean_bias, na.rm = TRUE),
+    delta_mu  = stats::median(delta_mu, na.rm = TRUE),
+    mean_bias = stats::median(mean_bias, na.rm = TRUE),
     .groups   = "drop"
   ) %>%
   mutate(
@@ -386,5 +394,26 @@ prod %>%
     mean_bias = sprintf("%.4f", mean_bias)
   ) %>%
   arrange(model, method) %>%
+  as.data.frame() %>%
+  print(row.names = FALSE)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TABLE 11 — PRISM Stationarity Certification (MAR)
+# ══════════════════════════════════════════════════════════════════════════════
+# Fraction of PRISM replications that reached first-order stationarity
+# (status = "converged") rather than stopping at max_iter.  The headline
+# tables above are NOT filtered on status; this table shows how much of the
+# evidence is certified in each cell.
+hr("TABLE 11 — PRISM Stationarity Certification (MAR, frac converged)")
+
+prod %>%
+  filter(mech == "MAR", method %in% c("PRISM", "PRISM_MI")) %>%
+  mutate(miss_pct = sprintf("%.0f%%", miss * 100)) %>%
+  group_by(model, method, dist, miss_pct) %>%
+  summarise(frac = mean(status == "converged", na.rm = TRUE), .groups = "drop") %>%
+  mutate(Display = sprintf("%.2f", frac)) %>%
+  select(model, method, dist, miss_pct, Display) %>%
+  pivot_wider(names_from = miss_pct, values_from = Display) %>%
+  arrange(model, method, dist) %>%
   as.data.frame() %>%
   print(row.names = FALSE)
