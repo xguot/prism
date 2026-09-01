@@ -63,7 +63,11 @@
 #' the perturbed model-implied means by default (\code{target_means = TRUE}),
 #' so the level-2 parameter draws propagate into the first moments as well;
 #' \code{target_means = FALSE} preserves the column means of that draw's own
-#' \eqn{X^{(0,k)}} instead.
+#' \eqn{X^{(0,k)}} instead. Parameter draws are sampled with eigenvalue
+#' flooring and validated per draw; a draw whose implied moments cannot be
+#' instantiated (degenerate fits in heavy-tail conditions) is re-rolled in a
+#' shrinking neighbourhood of the estimates and, as a last resort, replaced
+#' by the observed fit's implied moments with a warning.
 #'
 #' @return A list of \code{m} completed data frames (class
 #'   \code{"prism_mi_list"}), each carrying a \code{prism_diagnostics}
@@ -109,6 +113,7 @@ prism_mi <- function(data, fit, m = 20, initial_imputation = NULL,
   ov_names <- lavaan::lavNames(fit, "ov")
 
   # level 1: resolve the stochastic initializer
+  deterministic_level1 <- FALSE
   if (is.null(initializer)) {
     if (!is.null(initial_imputation)) {
       warning(
@@ -120,6 +125,7 @@ prism_mi <- function(data, fit, m = 20, initial_imputation = NULL,
       )
       x0_deterministic <- initial_imputation
       initializer <- function(data) x0_deterministic
+      deterministic_level1 <- TRUE
     } else {
       num_trees <- getOption("prism.num_trees", 500L)
       initializer <- stochastic_rf_initializer(ov_names, num_trees)
@@ -130,29 +136,32 @@ prism_mi <- function(data, fit, m = 20, initial_imputation = NULL,
          "a complete data frame or matrix.", call. = FALSE)
   }
 
-  # level 2: parameter draws from the asymptotic FIML sampling distribution
-  if (!requireNamespace("MASS", quietly = TRUE)) {
-    stop("Package 'MASS' is required for prism_mi(). ",
-         "Install it with install.packages('MASS').", call. = FALSE)
-  }
+  theta_hat <- tryCatch(lavaan::coef(fit), error = function(e) NULL)
+  acov <- tryCatch(as.matrix(lavaan::vcov(fit)), error = function(e) NULL)
 
-  theta_hat <- lavaan::coef(fit)
-  acov <- as.matrix(lavaan::vcov(fit))
-
-  if (anyNA(theta_hat) || anyNA(acov)) {
-    stop("Parameter estimates or asymptotic covariance matrix contain NAs. ",
-         "The model may not be identified.", call. = FALSE)
-  }
-
-  draws <- tryCatch(
-    MASS::mvrnorm(n = m, mu = theta_hat, Sigma = acov),
-    error = function(e) {
-      # Fall back to perturbing each parameter independently
-      matrix(stats::rnorm(m * length(theta_hat), mean = theta_hat,
-                          sd = sqrt(pmax(diag(acov), 1e-8))),
-             nrow = m, byrow = TRUE)
+  if (is.null(theta_hat) || is.null(acov) ||
+      anyNA(theta_hat) || anyNA(acov)) {
+    if (deterministic_level1) {
+      stop("The fitted model's parameter estimates or asymptotic covariance ",
+           "are unavailable (the model may not have converged) and the ",
+           "initializer is deterministic, so no source of between-imputation ",
+           "uncertainty is available. Refit the model or supply a ",
+           "stochastic 'initializer'.", call. = FALSE)
     }
-  )
+    warning("The fitted model's parameter estimates or asymptotic covariance ",
+            "are unavailable (the model may not have converged); ",
+            "parameter-uncertainty draws are disabled and each imputation ",
+            "projects onto the observed fit's implied moments. ",
+            "Between-imputation variance now comes from the stochastic ",
+            "initializer only.", call. = FALSE)
+    acov <- NULL
+    draws <- NULL
+  } else {
+    # level 2: parameter draws from the asymptotic FIML sampling
+    # distribution, with eigenvalue flooring so degenerate fits cannot
+    # produce wild vectors
+    draws <- prism_draw_parameters(theta_hat, acov, m)
+  }
 
   pt <- lavaan::parTable(fit)
   free_idx <- which(pt$free > 0L)
@@ -161,37 +170,105 @@ prism_mi <- function(data, fit, m = 20, initial_imputation = NULL,
   sample_nobs <- lavaan::lavInspect(fit, "nobs")
 
   imputations <- vector("list", m)
+  draw_fallbacks <- 0L
+  extreme_fallbacks <- 0L
 
   for (i in seq_len(m)) {
     # level 1: fresh stochastic initial imputation
     x0_i <- validate_initializer_output(initializer(data), data, ov_names)
 
     # level 2: perturbed model-implied covariance from theta^(k)
-    pt_i <- pt
-    pt_i$start[free_idx] <- draws[i, ]
-    pt_i$est[free_idx]   <- draws[i, ]
-
-    # Suppress lavaan startup banner per iteration.  The model is not refit
-    # (do.fit = FALSE): it is only instantiated to compute the model-implied
-    # moments from the perturbed parameters, so the post-fit convergence
-    # check must be disabled.
-    fit_i <- suppressMessages(
-      lavaan::lavaan(
-        model      = pt_i,
-        sample.cov = sample_cov,
-        sample.nobs = sample_nobs,
-        do.fit     = FALSE,
-        se         = "none",
-        test       = "none",
-        check.post = FALSE
+    #
+    # Even floored draws can yield non-finite or indefinite implied moments
+    # in heavy-tail conditions; re-roll the draw in a shrinking
+    # neighbourhood of the estimates (variance acov / attempt) and fall
+    # back to the observed fit's implied moments as a last resort.
+    fit_i <- NULL
+    sigma_i <- NULL
+    if (is.null(acov)) {
+      # parameter draws are disabled: project every draw onto the observed
+      # fit's implied moments when computable
+      base_moments <- tryCatch(
+        list(sigma = as.matrix(lavaan::fitted(fit)$cov), fit_i = fit),
+        error = function(e) NULL
       )
-    )
+      if (is.null(base_moments)) {
+        # extreme fallback: the initial imputation's sample covariance
+        # (between-imputation variance then comes from level 1 only)
+        sigma_i <- stats::cov(x0_i)
+        fit_i <- NULL
+        extreme_fallbacks <- extreme_fallbacks + 1L
+      } else {
+        sigma_i <- base_moments$sigma
+        fit_i <- base_moments$fit_i
+        draw_fallbacks <- draw_fallbacks + 1L
+      }
+    } else {
+      for (attempt in seq_len(10L)) {
+        pt_i <- pt
+        if (attempt == 1L) {
+          pt_i$start[free_idx] <- draws[i, ]
+          pt_i$est[free_idx]   <- draws[i, ]
+        } else {
+          d <- as.numeric(prism_draw_parameters(theta_hat, acov / attempt, 1L))
+          pt_i$start[free_idx] <- d
+          pt_i$est[free_idx]   <- d
+        }
 
-    sigma_i <- as.matrix(lavaan::fitted(fit_i)$cov)
+        # Suppress lavaan startup banner per iteration.  The model is not
+        # refit (do.fit = FALSE): it is only instantiated to compute the
+        # model-implied moments from the perturbed parameters, so the
+        # post-fit convergence check must be disabled.
+        fit_i <- tryCatch(
+          suppressMessages(
+            lavaan::lavaan(
+              model      = pt_i,
+              sample.cov = sample_cov,
+              sample.nobs = sample_nobs,
+              do.fit     = FALSE,
+              se         = "none",
+              test       = "none",
+              check.post = FALSE
+            )
+          ),
+          error = function(e) NULL
+        )
+        if (!is.null(fit_i)) {
+          sigma_i <- tryCatch(as.matrix(lavaan::fitted(fit_i)$cov),
+                              error = function(e) NULL)
+          if (!is.null(sigma_i) && all(is.finite(sigma_i)) &&
+              min(eigen(sigma_i, symmetric = TRUE,
+                        only.values = TRUE)$values) > -1e-8) {
+            break
+          }
+        }
+        fit_i <- NULL
+        sigma_i <- NULL
+      }
+      if (is.null(sigma_i)) {
+        # fall back to the observed fit's implied moments when they can be
+        # computed; a non-converged base fit can make even fitted() fail
+        base_moments <- tryCatch(
+          list(sigma = as.matrix(lavaan::fitted(fit)$cov), fit_i = fit),
+          error = function(e) NULL
+        )
+        if (is.null(base_moments)) {
+          sigma_i <- stats::cov(x0_i)
+          fit_i <- NULL
+          extreme_fallbacks <- extreme_fallbacks + 1L
+        } else {
+          sigma_i <- base_moments$sigma
+          fit_i <- base_moments$fit_i
+          draw_fallbacks <- draw_fallbacks + 1L
+        }
+      }
+    }
     colnames(sigma_i) <- ov_names
     rownames(sigma_i) <- ov_names
 
-    # Resolve the mean target for this draw from the perturbed fit
+    # Resolve the mean target for this draw from the perturbed fit (NULL
+    # when the extreme fallback was used: resolve_mean_target then anchors
+    # the initial imputation's means with a warning)
     mu_i <- tryCatch({
       mu <- lavaan::fitted(fit_i)$mean
       if (is.null(mu) || length(mu) != length(ov_names)) NULL
@@ -208,6 +285,17 @@ prism_mi <- function(data, fit, m = 20, initial_imputation = NULL,
       ...
     )
     attr(imputations[[i]], "imputation") <- i
+  }
+
+  if (draw_fallbacks > 0L || extreme_fallbacks > 0L) {
+    warning(
+      sprintf("Parameter draws were degenerate in %d of %d imputations ",
+              draw_fallbacks + extreme_fallbacks, m),
+      sprintf("(%d used the observed fit's implied moments, %d used the ",
+              draw_fallbacks, extreme_fallbacks),
+      "initial imputation's sample covariance).",
+      call. = FALSE
+    )
   }
 
   class(imputations) <- c("prism_mi_list", "list")
@@ -302,4 +390,30 @@ validate_initializer_output <- function(x0, data, ov_names) {
     )
   }
   x0_mat
+}
+
+
+# Draw perturbed parameter vectors theta ~ N(theta_hat, acov) with
+# eigenvalue flooring.
+#
+# The asymptotic covariance of a degenerate fit can be near-singular or
+# indefinite, and sampling from it directly produces wild parameter
+# vectors whose implied moments are unusable (non-finite or non-PSD).
+# Negative or near-zero eigenvalues are floored at a small multiple of the
+# largest eigenvalue before drawing, which keeps the draws in a regular
+# neighbourhood of the estimates without changing the procedure for
+# well-conditioned fits.  The draw is exact for positive semidefinite acov
+# whose smallest eigenvalue exceeds the floor.
+#' @keywords internal
+prism_draw_parameters <- function(theta_hat, acov, m) {
+  eig <- eigen(acov, symmetric = TRUE)
+  lam <- eig$values
+  scale <- max(abs(lam), 1e-8)
+  floor_val <- max(1e-10 * scale, 1e-8)
+  lam_stable <- pmax(lam, floor_val)
+  z <- matrix(stats::rnorm(m * length(theta_hat)),
+              nrow = m, ncol = length(theta_hat))
+  half <- eig$vectors %*% diag(sqrt(lam_stable)) %*% t(eig$vectors)
+  matrix(theta_hat, nrow = m, ncol = length(theta_hat), byrow = TRUE) +
+    z %*% half
 }

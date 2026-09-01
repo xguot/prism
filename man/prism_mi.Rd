@@ -94,7 +94,11 @@ predictive matching). Within each draw, the PRISM v2 projection targets
 the perturbed model-implied means by default (\code{target_means = TRUE}),
 so the level-2 parameter draws propagate into the first moments as well;
 \code{target_means = FALSE} preserves the column means of that draw's own
-\eqn{X^{(0,k)}} instead.
+\eqn{X^{(0,k)}} instead. Parameter draws are sampled with eigenvalue
+flooring and validated per draw; a draw whose implied moments cannot be
+instantiated (degenerate fits in heavy-tail conditions) is re-rolled in a
+shrinking neighbourhood of the estimates and, as a last resort, replaced
+by the observed fit's implied moments with a warning.
 }
 \examples{
 \dontrun{
