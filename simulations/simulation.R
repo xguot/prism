@@ -18,6 +18,15 @@ seed_base <- 20250523
 set.seed(if (is.na(array_id)) seed_base else seed_base + array_id)
 
 # ── Simulation Grid ───────────────────────────────────────────────────────────
+#
+# NOTE (2026-08-31): the previous sim_results generation used the anchored
+# method (target_means = FALSE, i.e. the initialiser's means preserved) and
+# is OBSOLETE.  The PRISM / PRISM_MI rows below now use the in-engine joint
+# (mu, Sigma) projection (target_means = TRUE, lambda_sigma = 10).  Archive
+# the old generation on the cluster before resubmitting so that no
+# mixed-generation files remain:
+#   ssh rivanna "cd ~/scratch/prism && mv sim_results sim_results_v1_anchored"
+#
 # Aligned with Tang & Tong (UVA) manuscript:
 #   model   — GCM (latent growth) and SEM (two-factor structural regression)
 #   N       — 100, 200, 500, 1000, 5000, 10000
@@ -108,12 +117,15 @@ prism_diag_fn <- function(imp) {
   d <- attr(imp, "prism_diagnostics")
   if (is.null(d)) {
     return(list(r_kkT = NA_real_, feas_gap = NA_real_, fidelity = NA_real_,
-                status = NA_character_))
+                status = NA_character_, lambda_sigma = NA_real_,
+                mean_gap = NA_real_))
   }
   list(r_kkT    = d$r_kkT,
        feas_gap = d$feas_gap,
        fidelity = d$fidelity,
-       status   = d$status)
+       status   = d$status,
+       lambda_sigma = d$lambda_sigma,
+       mean_gap = d$mean_gap)
 }
 
 mi_prism_diag_fn <- function(imp_list) {
@@ -122,6 +134,8 @@ mi_prism_diag_fn <- function(imp_list) {
     r_kkT    = mean(vapply(ds, `[[`, numeric(1), "r_kkT")),
     feas_gap = mean(vapply(ds, `[[`, numeric(1), "feas_gap")),
     fidelity = mean(vapply(ds, `[[`, numeric(1), "fidelity")),
+    lambda_sigma = mean(vapply(ds, `[[`, numeric(1), "lambda_sigma")),
+    mean_gap = mean(vapply(ds, `[[`, numeric(1), "mean_gap")),
     status   = if (length(ds) > 0) ds[[1]]$status else NA_character_
   )
 }
@@ -340,6 +354,7 @@ make_result_row <- function(sim_id, params, act_m, model, method, f_dist,
                             delta_mu = NA_real_, mean_bias = NA_real_,
                             r_kkT = NA_real_, feas_gap = NA_real_,
                             fidelity = NA_real_, status = NA_character_,
+                            lambda_sigma = NA_real_, mean_gap = NA_real_,
                             s_var = NA_real_, s_var_bias = NA_real_,
                             s_se = NA_real_,
                             est_L = NA_real_, est_S = NA_real_,
@@ -372,6 +387,8 @@ make_result_row <- function(sim_id, params, act_m, model, method, f_dist,
     feas_gap     = nz(feas_gap),
     fidelity     = nz(fidelity),
     status       = nz(status),
+    lambda_sigma = nz(lambda_sigma),
+    mean_gap     = nz(mean_gap),
     s_var        = s_var,
     s_var_bias   = s_var_bias,
     s_se         = s_se,
@@ -420,7 +437,8 @@ run_iteration_gcm <- function(sim_id, params) {
       bias_cov_LS = rel_bias(gp["psi_LS"], c_is),
       delta_mu = diag$delta_mu, mean_bias = diag$mean_bias,
       r_kkT = diag$r_kkT, feas_gap = diag$feas_gap,
-      fidelity = diag$fidelity, status = diag$status
+      fidelity = diag$fidelity, status = diag$status,
+      lambda_sigma = diag$lambda_sigma, mean_gap = diag$mean_gap
     )
   }
   res_list <- list()
@@ -550,14 +568,19 @@ run_iteration_gcm <- function(sim_id, params) {
   res_list[[4]] <- mk("missForest", d_mf, s_var_mf, s_se_mf, time_mf,
                       gp, gs, diag = mf_diag)
 
-  # ── prism_fiml: FIML model-implied Σ target ───────────────────────────
-  # Uses prism_fiml() which fits a lavaan growth model with FIML to extract
-  # the model-implied covariance as the structural target, then projects the
-  # missForest initial imputation toward it.
+  # ── prism_fiml: FIML model-implied (mu, Sigma) target ──────────────────
+  # Uses prism_fiml() with target_means = TRUE (joint mean + covariance
+  # projection; the engine pins the missing-cell column sums to the FIML
+  # model-implied means).  lambda_sigma = 10 was chosen by a local sweep
+  # (n=200 GCM Normal ~20% missing): scaled covariance gaps {0.5, 1, 2, 5,
+  # 10} -> {1.050, 1.016, 0.951, 0.790, 0.607}; mean-to-target gap was
+  # ~1e-16 at every lambda.  10 closes most of the gap within the sweep
+  # while keeping fidelity to the missForest initialiser modest.
   time_sf <- system.time({
     imp_sf <- tryCatch(suppressWarnings(
       prism_fiml(df_miss, model = gcm_mod,
-                 initial_imputation = imp_mf, lambda_sigma = 1.0)),
+                 initial_imputation = imp_mf, lambda_sigma = 10.0,
+                 target_means = TRUE)),
       error = function(e) NULL)
     s_var_sf <- NA; s_se_sf <- NA; d_sf <- NA
     gp <- c(beta_L = NA, beta_S = NA, psi_L = NA, psi_S = NA, psi_LS = NA)
@@ -584,10 +607,12 @@ run_iteration_gcm <- function(sim_id, params) {
     imp_smi_list <- tryCatch(suppressWarnings({
       fit_fiml_base <- growth(gcm_mod, data = df_miss, missing = "fiml")
       if (two_level_mi) {
-        prism_mi(df_miss, fit_fiml_base, m = m_prism, lambda_sigma = 1.0)
+        prism_mi(df_miss, fit_fiml_base, m = m_prism, lambda_sigma = 10.0,
+                 target_means = TRUE)
       } else {
         prism_mi(df_miss, fit_fiml_base, m = m_prism,
-                 initial_imputation = imp_mf, lambda_sigma = 1.0)
+                 initial_imputation = imp_mf, lambda_sigma = 10.0,
+                 target_means = TRUE)
       }
     }), error = function(e) NULL)
 
@@ -654,7 +679,8 @@ run_iteration_sem <- function(sim_id, params) {
       bias_var_F2 = rel_bias(gp["psi_F2"], psi_F2_true),
       delta_mu = diag$delta_mu, mean_bias = diag$mean_bias,
       r_kkT = diag$r_kkT, feas_gap = diag$feas_gap,
-      fidelity = diag$fidelity, status = diag$status
+      fidelity = diag$fidelity, status = diag$status,
+      lambda_sigma = diag$lambda_sigma, mean_gap = diag$mean_gap
     )
   }
   res_list <- list()
@@ -769,14 +795,15 @@ run_iteration_sem <- function(sim_id, params) {
   res_list[[4]] <- mk("missForest", d_mf, b_mf, b_se_mf, time_mf,
                       gp, gs, diag = mf_diag)
 
-  # ── prism_sem: FIML model-implied Σ target ───────────────────────────
+  # ── prism_sem: FIML model-implied (mu, Sigma) target ───────────────────
   time_sf <- system.time({
     imp_sf <- tryCatch(suppressWarnings(
       # reuse the FIML fit from the baseline block when available to avoid
       # refitting the model per replication
       prism_sem(df_miss,
                 model = if (!is.null(fit_fiml)) fit_fiml else sem_mod,
-                initial_imputation = imp_mf, lambda_sigma = 1.0)),
+                initial_imputation = imp_mf, lambda_sigma = 10.0,
+                target_means = TRUE)),
       error = function(e) NULL)
     b_sf <- NA; b_se_sf <- NA; d_sf <- NA
     gp <- c(b21 = NA, psi_F1 = NA, psi_F2 = NA)
@@ -803,10 +830,12 @@ run_iteration_sem <- function(sim_id, params) {
     imp_smi_list <- tryCatch(suppressWarnings({
       fit_fiml_base <- lavaan::sem(sem_mod, data = df_miss, missing = "fiml")
       if (two_level_mi) {
-        prism_mi(df_miss, fit_fiml_base, m = m_prism, lambda_sigma = 1.0)
+        prism_mi(df_miss, fit_fiml_base, m = m_prism, lambda_sigma = 10.0,
+                 target_means = TRUE)
       } else {
         prism_mi(df_miss, fit_fiml_base, m = m_prism,
-                 initial_imputation = imp_mf, lambda_sigma = 1.0)
+                 initial_imputation = imp_mf, lambda_sigma = 10.0,
+                 target_means = TRUE)
       }
     }), error = function(e) NULL)
 

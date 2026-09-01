@@ -54,11 +54,16 @@ res_hard <- run_iteration(1, params_hard)
 check_schema(res_hard, "GCM", "GCM hard condition (n=100, miss=0.30 MAR)")
 stopifnot(res_hard$actual_miss[1] > 0.25 && res_hard$actual_miss[1] < 0.35)
 
-# mean-preservation invariant: completed PRISM data must not drift from X0
+# mean-targeting invariant: the in-engine joint (mu, Sigma) projection must
+# pin the completed column means to the FIML model-implied means exactly
+# (target_means = TRUE is the new default path); delta_mu vs the missForest
+# initialiser is nonzero by design and is no longer asserted here.
 prism_row <- res_gcm[res_gcm$method == "PRISM", ]
 stopifnot(!is.na(prism_row$delta_mu))
-cat(sprintf("GCM PRISM delta_mu = %.2e (expect ~0)\n", prism_row$delta_mu))
-stopifnot(prism_row$delta_mu < 1e-8)
+stopifnot(!is.na(prism_row$mean_gap), prism_row$mean_gap < 1e-8)
+stopifnot(!is.na(prism_row$lambda_sigma), prism_row$lambda_sigma == 10)
+cat(sprintf("GCM PRISM mean_gap = %.2e (target_means = TRUE), delta_mu = %.2e\n",
+            prism_row$mean_gap, prism_row$delta_mu))
 
 # FIML sanity: slope variance should be near the true value 1
 fiml_row <- res_gcm[res_gcm$method == "FIML", ]
@@ -72,8 +77,9 @@ res_sem <- check_schema(res_sem, "SEM", "SEM")
 
 prism_row2 <- res_sem[res_sem$method == "PRISM", ]
 stopifnot(!is.na(prism_row2$delta_mu))
-cat(sprintf("SEM PRISM delta_mu = %.2e (expect ~0)\n", prism_row2$delta_mu))
-stopifnot(prism_row2$delta_mu < 1e-8)
+stopifnot(!is.na(prism_row2$mean_gap), prism_row2$mean_gap < 1e-8)
+cat(sprintf("SEM PRISM mean_gap = %.2e (target_means = TRUE), delta_mu = %.2e\n",
+            prism_row2$mean_gap, prism_row2$delta_mu))
 
 fiml_row2 <- res_sem[res_sem$method == "FIML", ]
 cat(sprintf("SEM FIML b21 = %.3f (true 0.5), psi_F2 bias = %.1f%% (expect ~0)\n",
