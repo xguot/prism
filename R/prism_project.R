@@ -70,6 +70,46 @@ warn_prism_diagnostics <- function(diag) {
 }
 
 
+# Resolve the mean target from the target_means argument.
+#
+# TRUE  -> model-implied means supplied by the caller (the default: joint
+#          mean + covariance projection, consistent under MAR)
+# FALSE -> NULL (the engine anchors the initial imputation's column means)
+# numeric vector of length p -> custom mean target
+# anything else (wrong length, non-numeric, non-logical, non-finite) -> error
+#' @keywords internal
+resolve_mean_target <- function(target_means, implied_means, ov_names) {
+  p <- length(ov_names)
+  if (is.numeric(target_means)) {
+    if (length(target_means) != p) {
+      stop("Length of 'target_means' (", length(target_means),
+           ") must match the number of observed variables (", p, ").",
+           call. = FALSE)
+    }
+    mu <- as.numeric(target_means)
+    if (any(!is.finite(mu))) {
+      stop("'target_means' must contain only finite values.", call. = FALSE)
+    }
+    return(mu)
+  }
+  if (is.logical(target_means) && length(target_means) == 1L &&
+      !is.na(target_means)) {
+    if (!target_means) {
+      return(NULL)
+    }
+    if (is.null(implied_means) || length(implied_means) != p) {
+      warning("Could not extract model-implied means from the lavaan fit; ",
+              "falling back to mean preservation of the initial imputation.",
+              call. = FALSE)
+      return(NULL)
+    }
+    return(as.numeric(implied_means))
+  }
+  stop("'target_means' must be TRUE, FALSE, or a numeric vector of length ",
+       p, ".", call. = FALSE)
+}
+
+
 # Internal covariance projection engine (PRISM v2).
 #
 # Project an initial imputation matrix onto the structural target under the
@@ -83,20 +123,24 @@ warn_prism_diagnostics <- function(diag) {
 # covariance discrepancy per matrix entry), so lambda_sigma is dimensionless
 # and comparable across sample sizes, variable counts, and missingness
 # rates.  The objective is minimized subject to the observed cells being
-# frozen and the column means of the initial imputation preserved.  The C++
-# engine projects the gradient of the missing cells onto the zero-sum
-# subspace of each column before every step (mean-preserving projected
-# gradient descent) and reports KKT diagnostics: the projected-gradient norm
-# (r_kkT), the covariance feasibility gap, and per-column Lagrange
-# multiplier estimates.  Only originally-missing cells are updated.
+# frozen and each column mean being fixed: to the scaled mean target when
+# mu_target is supplied (a joint (mu, Sigma) projection), or to the initial
+# imputation's column mean otherwise (the legacy anchor).  The C++ engine
+# projects the gradient of the missing cells onto the zero-sum subspace of
+# each column before every step and reports KKT diagnostics: the
+# projected-gradient norm (r_kkT), the covariance feasibility gap, and
+# per-column Lagrange multiplier estimates.  Only originally-missing cells
+# are updated, and the returned matrix is the certified constrained optimum
+# the diagnostics describe.
 #
 # The data are standardized internally so that the objective and tolerances
 # are comparable across variable scales; results are unscaled afterwards and
-# missing-cell column sums are re-anchored to the initial imputation as a
-# defensive exactness guarantee.
+# (in the legacy X0-anchor mode only) missing-cell column sums are
+# re-anchored to the initial imputation as a defensive exactness guarantee.
 #'
 #' @keywords internal
 prism_project <- function(data, ov_names, sigma_target,
+                          mu_target = NULL,
                           initial_imputation = NULL,
                           lambda_sigma = NULL, lr = 1,
                           tol_kkT = 1e-4, tol_cov = 1e-6,
@@ -107,6 +151,19 @@ prism_project <- function(data, ov_names, sigma_target,
   # 0.25-4 is recommended for simulation studies)
   if (is.null(lambda_sigma)) {
     lambda_sigma <- 1.0
+  }
+
+  # mu_target validation
+  if (!is.null(mu_target)) {
+    mu_target <- as.numeric(mu_target)
+    if (length(mu_target) != length(ov_names)) {
+      stop("Length of 'mu_target' (", length(mu_target),
+           ") must match the number of observed variables (",
+           length(ov_names), ").", call. = FALSE)
+    }
+    if (any(!is.finite(mu_target))) {
+      stop("'mu_target' must contain only finite values.", call. = FALSE)
+    }
   }
 
   # argument guards
@@ -240,7 +297,19 @@ prism_project <- function(data, ov_names, sigma_target,
   scaling_mat  <- diag(1 / col_sds)
   sigma_scaled <- scaling_mat %*% sigma_target %*% scaling_mat
 
-  # C++ v2 engine: regularized projection with mean-preserving gradients
+  # Scale the mean target into the engine's standardized space:
+  # mu_scaled_j = (mu_target_j - mean(X0[,j])) / sd(X0[,j]).  The engine
+  # anchors the missing-cell column sums to n * mu_scaled_j - obs_sum_j, so
+  # the completed column mean equals mu_target_j exactly (the affine
+  # unscaling preserves this in the original units).  NULL keeps the legacy
+  # X0-anchor behaviour.
+  mu_scaled <- NULL
+  if (!is.null(mu_target)) {
+    mu_scaled <- (mu_target - col_means) / col_sds
+  }
+
+  # C++ v2 engine: regularized projection with mean anchoring; the returned
+  # matrix is the certified constrained optimum described by the diagnostics
   cpp_result <- constrain_covariance_v2(
     X_imp        = x_scaled,
     mask         = mask,
@@ -249,7 +318,8 @@ prism_project <- function(data, ov_names, sigma_target,
     lr           = lr,
     max_iter     = max_iter,
     tol_kkT      = tol_kkT,
-    tol_cov      = tol_cov
+    tol_cov      = tol_cov,
+    mu_scaled_target = mu_scaled
   )
   x_refined_scaled <- cpp_result$X_refined
 
@@ -269,11 +339,27 @@ prism_project <- function(data, ov_names, sigma_target,
   # Unscale the results back to original units
   x_refined <- t(t(x_refined_scaled) * col_sds + col_means)
 
-  # Re-anchor missing-cell column sums to the initial imputation so that the
-  # column means of X0 are preserved exactly in the returned data, even after
-  # the defensive PSD fix-up and rescaling round-trips
+  # ── Mean handling ──────────────────────────────────────────────────────────
+  # The engine already enforces the mean anchor internally (scaled mean
+  # target when mu_target is supplied, X0 anchor otherwise), so the returned
+  # matrix is the certified constrained optimum and no post-hoc correction
+  # is applied in mean-targeting mode.  The legacy re-anchor below is a
+  # defensive no-op for the X0-anchor mode only; it guards against drift in
+  # the rescaling round-trips.
   n_mis <- colSums(mask)
-  if (any(n_mis > 0)) {
+  mean_gap <- NA_real_
+
+  if (!is.null(mu_target) && any(n_mis > 0)) {
+    # Mean-to-target gap of the RETURNED matrix, restricted to columns with
+    # missing cells (the only columns the engine can move).  Fully observed
+    # columns keep their observed means and cannot reach a target that
+    # differs from them.
+    mean_gap <- max(abs(colMeans(x_refined)[n_mis > 0] -
+                        mu_target[n_mis > 0]))
+  } else if (any(n_mis > 0)) {
+    # Re-anchor missing-cell column sums to the initial imputation so that
+    # the column means of X0 are preserved exactly (defensive no-op; the
+    # engine already preserves them)
     anchor_sums   <- colSums(x_hallucinated * mask)
     current_sums  <- colSums(x_refined * mask)
     anchor_cols   <- which(n_mis > 0)
@@ -312,7 +398,9 @@ prism_project <- function(data, ov_names, sigma_target,
     max_abs_nu   = cpp_result$max_abs_nu,
     n_mis        = cpp_result$n_mis,
     lambda_sigma = lambda_sigma,
-    tol_cov      = tol_cov
+    tol_cov      = tol_cov,
+    mean_gap     = mean_gap,
+    mu_target    = mu_target
   )
   warn_prism_diagnostics(diag)
 

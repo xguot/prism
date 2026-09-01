@@ -5,7 +5,7 @@ constrain_covariance <- function(X_imp, mask, Sigma_target, lambda, lr, max_iter
     .Call(`_prism_constrain_covariance`, X_imp, mask, Sigma_target, lambda, lr, max_iter, tol)
 }
 
-constrain_covariance_v2 <- function(X_imp, mask, Sigma_target, lambda_sigma, lr, max_iter, tol_kkT, tol_cov) {
-    .Call(`_prism_constrain_covariance_v2`, X_imp, mask, Sigma_target, lambda_sigma, lr, max_iter, tol_kkT, tol_cov)
+constrain_covariance_v2 <- function(X_imp, mask, Sigma_target, lambda_sigma, lr, max_iter, tol_kkT, tol_cov, mu_scaled_target = NULL) {
+    .Call(`_prism_constrain_covariance_v2`, X_imp, mask, Sigma_target, lambda_sigma, lr, max_iter, tol_kkT, tol_cov, mu_scaled_target)
 }
 

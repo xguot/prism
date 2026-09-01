@@ -29,8 +29,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // constrain_covariance_v2
-Rcpp::List constrain_covariance_v2(const arma::mat& X_imp, const arma::mat& mask, const arma::mat& Sigma_target, double lambda_sigma, double lr, int max_iter, double tol_kkT, double tol_cov);
-RcppExport SEXP _prism_constrain_covariance_v2(SEXP X_impSEXP, SEXP maskSEXP, SEXP Sigma_targetSEXP, SEXP lambda_sigmaSEXP, SEXP lrSEXP, SEXP max_iterSEXP, SEXP tol_kkTSEXP, SEXP tol_covSEXP) {
+Rcpp::List constrain_covariance_v2(const arma::mat& X_imp, const arma::mat& mask, const arma::mat& Sigma_target, double lambda_sigma, double lr, int max_iter, double tol_kkT, double tol_cov, Rcpp::Nullable<Rcpp::NumericVector> mu_scaled_target);
+RcppExport SEXP _prism_constrain_covariance_v2(SEXP X_impSEXP, SEXP maskSEXP, SEXP Sigma_targetSEXP, SEXP lambda_sigmaSEXP, SEXP lrSEXP, SEXP max_iterSEXP, SEXP tol_kkTSEXP, SEXP tol_covSEXP, SEXP mu_scaled_targetSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -42,14 +42,15 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
     Rcpp::traits::input_parameter< double >::type tol_kkT(tol_kkTSEXP);
     Rcpp::traits::input_parameter< double >::type tol_cov(tol_covSEXP);
-    rcpp_result_gen = Rcpp::wrap(constrain_covariance_v2(X_imp, mask, Sigma_target, lambda_sigma, lr, max_iter, tol_kkT, tol_cov));
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::NumericVector> >::type mu_scaled_target(mu_scaled_targetSEXP);
+    rcpp_result_gen = Rcpp::wrap(constrain_covariance_v2(X_imp, mask, Sigma_target, lambda_sigma, lr, max_iter, tol_kkT, tol_cov, mu_scaled_target));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
     {"_prism_constrain_covariance", (DL_FUNC) &_prism_constrain_covariance, 7},
-    {"_prism_constrain_covariance_v2", (DL_FUNC) &_prism_constrain_covariance_v2, 8},
+    {"_prism_constrain_covariance_v2", (DL_FUNC) &_prism_constrain_covariance_v2, 9},
     {NULL, NULL, 0}
 };
 

@@ -161,13 +161,17 @@ Rcpp::List constrain_covariance(const arma::mat& X_imp,
  *           + lambda_sigma * (2 / (p^2 (n - 1))) * Xc * R ],
  *   R = S(X) - Sigma_target.
  *
- * Mean-preserving projection: for every column j, the gradient of the
- * missing cells is centered at zero (Gtilde_ij = G_ij - mean_{i in M_j} G_ij),
- * so every accepted step keeps sum_i X_ij over the missing cells constant and
- * hence preserves the column means of the initial imputation exactly.  This
- * is projected gradient descent on the affine mean constraint; the column
- * means of G are the negated Lagrange multipliers of that constraint and
- * are returned as diagnostics.
+ * Mean anchoring: for every column j, the gradient of the missing cells is
+ * centered at zero (Gtilde_ij = G_ij - mean_{i in M_j} G_ij), so every
+ * accepted step keeps sum_i X_ij over the missing cells constant.  Before
+ * the loop the starting point is projected onto the affine set of the
+ * anchor sums s_j: with a scaled mean target, s_j = n * mu_j - obs_sum_j
+ * pins the completed column mean to mu_j exactly; without one, s_j is the
+ * missing-cell sum of X0 and the initial imputation's column mean is
+ * preserved.  The returned matrix is therefore a true KKT point of the
+ * joint mean-constrained covariance problem.  The column means of G are the
+ * negated Lagrange multipliers of the mean constraint and are returned as
+ * diagnostics.
  *
  * Stationarity (KKT) is certified by the projected-gradient norm ||Gtilde||_F:
  * at a constrained optimum the raw gradient is column-constant on the missing
@@ -188,6 +192,8 @@ Rcpp::List constrain_covariance(const arma::mat& X_imp,
  *   max_iter     maximum iterations
  *   tol_kkT      stationarity tolerance on the projected-gradient norm
  *   tol_cov      feasibility tolerance on ||S(X) - Sigma_target||_F
+ *   mu_scaled_target optional p-vector of scaled column-mean targets;
+ *                NULL or an NA entry anchors that column to X0's mean
  *
  * Returns X_refined plus diagnostics: status, residuals, objective
  * components, and per-column multiplier estimates.
@@ -201,7 +207,8 @@ Rcpp::List constrain_covariance_v2(
     double lr,
     int max_iter,
     double tol_kkT,
-    double tol_cov) {
+    double tol_cov,
+    Rcpp::Nullable<Rcpp::NumericVector> mu_scaled_target = R_NilValue) {
 
   const int n = X_imp.n_rows;
   const int p = X_imp.n_cols;
@@ -234,6 +241,26 @@ Rcpp::List constrain_covariance_v2(
     mis_idx[j] = arma::find(mask.col(j) > 0.5);
   }
 
+  /* Mean anchor: per-column missing-cell sums the optimizer must hold.
+   * A scaled mean target mu_j pins the completed column mean to mu_j via
+   * s_j = n * mu_j - obs_sum_j (obs_sum_j = observed-cell sum); a NULL
+   * vector or an NA entry keeps the legacy anchor s_j = X0's missing sum,
+   * preserving the initial imputation's column mean. */
+  const Rcpp::NumericVector mut =
+    mu_scaled_target.isNotNull() ? mu_scaled_target.as()
+                                 : Rcpp::NumericVector(0);
+  arma::vec anchor_s(p, arma::fill::zeros);
+  for (int j = 0; j < p; j++) {
+    if (mis_idx[j].n_elem == 0) continue;
+    if (mut.size() == p && !Rcpp::NumericVector::is_na(mut(j))) {
+      const double obs_sum = arma::accu(X_imp.col(j)) -
+                             arma::accu(mask.col(j) % X_imp.col(j));
+      anchor_s(j) = n * mut(j) - obs_sum;
+    } else {
+      anchor_s(j) = arma::accu(mask.col(j) % X_imp.col(j));
+    }
+  }
+
   const double c_armijo  = 1e-4;
   const double tau       = 0.5;
   const double eta_min   = 1e-12;
@@ -243,7 +270,20 @@ Rcpp::List constrain_covariance_v2(
   /* per-cell fidelity scale; zero when there is nothing to impute */
   const double fid_scale = (n_mis >= 1.0) ? (1.0 / n_mis) : 0.0;
 
+  /* shift the starting point onto the mean-anchor manifold once, before the
+   * loop; the zero-sum gradient projection keeps every accepted step inside
+   * it, so the returned matrix is a certified constrained optimum */
   arma::mat X_opt = X_imp;
+  for (int j = 0; j < p; j++) {
+    if (mis_idx[j].n_elem == 0) continue;
+    const double shift =
+      (anchor_s(j) - arma::accu(mask.col(j) % X_opt.col(j))) /
+      static_cast<double>(mis_idx[j].n_elem);
+    for (uword k = 0; k < mis_idx[j].n_elem; k++) {
+      X_opt(mis_idx[j](k), j) += shift;
+    }
+  }
+
   arma::mat Xc    = X_opt.each_row() - arma::mean(X_opt, 0);
   arma::mat Sigma_curr = (Xc.t() * Xc) / (n - 1.0);
   arma::mat R = Sigma_curr - Sigma_fixed;
@@ -274,7 +314,8 @@ Rcpp::List constrain_covariance_v2(
       /* full gradient on the free cells */
       G = mask % ((X_opt - X0) * fid_scale + lambda_sigma * cov_scale * Xc * R);
 
-      /* mean-preserving projection plus KKT diagnostics */
+      /* zero-sum projection onto the mean-anchor constraint plus KKT
+       * diagnostics */
       Gt = G;
       r_kkT = 0.0;
       for (int j = 0; j < p; j++) {

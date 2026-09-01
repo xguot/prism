@@ -3,12 +3,13 @@
 #' @description Fit a structural equation model via FIML (or reuse an already
 #'   fitted model), extract the model-implied covariance matrix, and project
 #'   an initial imputation onto that structural target under the PRISM v2
-#'   regularized objective. The engine, objective, mean preservation, and KKT
+#'   regularized objective. The engine, objective, mean anchoring, and KKT
 #'   diagnostics are identical to \code{\link{prism_fiml}}; this entry point
 #'   supports any single-group SEM estimated by \code{lavaan::sem()} —
 #'   CFAs, structural regressions among latent variables, mediation models,
-#'   and models with covariates. Only originally-missing cells are modified;
-#'   observed data are held fixed.
+#'   and models with covariates. By default the completed column means target
+#'   the FIML model-implied means. Only originally-missing cells are
+#'   modified; observed data are held fixed.
 #'
 #' @param data A data frame containing missing values.
 #' @param model Either lavaan model syntax (a single string) or a fitted
@@ -37,21 +38,27 @@
 #'   covariance gap to the target. Defaults to 1e-6.
 #' @param max_iter An integer specifying the maximum number of iterations
 #'   for the gradient descent projection. Defaults to 2000.
+#' @param target_means A logical or numeric vector controlling the mean
+#'   target of the projection. `TRUE` (default) targets the FIML
+#'   model-implied means of the observed variables, so the engine solves a
+#'   joint mean + covariance projection consistent under MAR. `FALSE`
+#'   preserves the column means of the initial imputation exactly (legacy
+#'   behaviour). A numeric vector of length p supplies a custom mean target.
+#'   Columns without missing values keep their observed means in all modes.
 #'
 #' @details
 #' The completed data solve the same regularized projection as
 #' \code{\link{prism_fiml}}: fidelity to the initial imputation is traded off
-#' against covariance matching through \code{lambda_sigma}, and the column
-#' means of the initial imputation are preserved exactly by mean-preserving
-#' projected gradients. Convergence is certified by the KKT diagnostics in
-#' the \code{prism_diagnostics} attribute (see \code{\link{prism_fiml}} for
-#' the field descriptions).
+#' against covariance matching through \code{lambda_sigma}, and each column
+#' mean is fixed to its target — the FIML model-implied means by default
+#' (\code{target_means = TRUE}) or the initial imputation's column means
+#' when \code{target_means = FALSE}. Convergence is certified by the KKT
+#' diagnostics in the \code{prism_diagnostics} attribute (see
+#' \code{\link{prism_fiml}} for the field descriptions).
 #'
 #' Restrictions: the model must be single-group and single-level with
 #' continuous observed variables. Ordinal, multi-group, and multilevel models
-#' are rejected with an error. As in \code{prism_fiml}, model-implied means
-#' are deliberately not targeted; first moments are anchored to the initial
-#' imputation.
+#' are rejected with an error.
 #'
 #' @return A data frame with the missing cells completed. Only the
 #'   originally-missing cells are modified. The \code{prism_diagnostics}
@@ -76,7 +83,8 @@
 prism_sem <- function(data, model, initial_imputation = NULL,
                       lambda_sigma = NULL, lr = 1,
                       tol_kkT = 1e-4, tol_cov = 1e-6,
-                      max_iter = 2000) {
+                      max_iter = 2000,
+                      target_means = TRUE) {
   if (!requireNamespace("lavaan", quietly = TRUE)) {
     stop("Package 'lavaan' is required. ",
          "Please install it with install.packages('lavaan').",
@@ -108,7 +116,8 @@ prism_sem <- function(data, model, initial_imputation = NULL,
     lr                 = lr,
     tol_kkT            = tol_kkT,
     tol_cov            = tol_cov,
-    max_iter           = max_iter
+    max_iter           = max_iter,
+    target_means       = target_means
   )
 }
 
@@ -154,12 +163,13 @@ validate_fitted_model <- function(fit, data) {
 }
 
 
-# Shared pipeline shared by prism_fiml and prism_sem: extract the
-# model-implied covariance of the observed variables from a fitted lavaan
-# object and run the projection engine against it.
+# Shared pipeline used by prism_fiml and prism_sem: extract the
+# model-implied covariance (and optionally the means) of the observed
+# variables from a fitted lavaan object and run the projection engine.
 #' @keywords internal
 prism_from_fit <- function(data, fit, initial_imputation,
-                           lambda_sigma, lr, tol_kkT, tol_cov, max_iter) {
+                           lambda_sigma, lr, tol_kkT, tol_cov, max_iter,
+                           target_means = TRUE) {
   sigma_target <- tryCatch(
     lavaan::lavInspect(fit, "cov.ov"),
     error = function(e) {
@@ -169,10 +179,22 @@ prism_from_fit <- function(data, fit, initial_imputation,
   )
   ov_names <- colnames(sigma_target)
 
+  # Resolve the mean target -----------------------------------------------
+  # TRUE  -> FIML model-implied means (the default; consistent under MAR,
+  #          removes the initialiser's first-moment bias)
+  # FALSE -> mean preservation of the initial imputation (legacy behaviour)
+  # numeric vector -> user-supplied custom mean target
+  implied_means <- tryCatch(
+    lavaan::lavInspect(fit, "mean.ov"),
+    error = function(e) NULL
+  )
+  mu_target <- resolve_mean_target(target_means, implied_means, ov_names)
+
   prism_project(
     data               = data,
     ov_names           = ov_names,
     sigma_target       = sigma_target,
+    mu_target          = mu_target,
     initial_imputation = initial_imputation,
     lambda_sigma       = lambda_sigma,
     lr                 = lr,

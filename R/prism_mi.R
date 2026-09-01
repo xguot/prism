@@ -40,6 +40,14 @@
 #'   a \code{\link[mice]{mids}} object for compatibility with the
 #'   \code{mice} pooling workflow. Requires the \code{mice} package.
 #'   Defaults to \code{FALSE}.
+#' @param target_means A logical or numeric vector controlling the mean
+#'   target of each draw's projection. `TRUE` (default) targets the
+#'   perturbed model-implied means of the observed variables (joint mean +
+#'   covariance projection; the level-2 parameter draw perturbs the means
+#'   as well). `FALSE` preserves the column means of each draw's own
+#'   initial imputation exactly (legacy behaviour). A numeric vector of
+#'   length p supplies a custom mean target. Columns without missing values
+#'   keep their observed means in all modes.
 #' @param ... Additional arguments passed to the internal projection engine,
 #'   e.g. \code{lambda_sigma}, \code{lr}, \code{tol_kkT}, \code{tol_cov},
 #'   \code{max_iter}.
@@ -51,9 +59,11 @@
 #' weighted sample. This varies the fitted forest across draws; it does not
 #' add node-level predictive draws. For cell-level predictive uncertainty,
 #' pass a custom \code{initializer} (e.g. one wrapping \code{miceRanger}
-#' predictive matching). Within each draw, the PRISM v2 projection preserves
-#' the column means of that draw's own \eqn{X^{(0,k)}}, so mean uncertainty
-#' propagates into the between-imputation variance as well.
+#' predictive matching). Within each draw, the PRISM v2 projection targets
+#' the perturbed model-implied means by default (\code{target_means = TRUE}),
+#' so the level-2 parameter draws propagate into the first moments as well;
+#' \code{target_means = FALSE} preserves the column means of that draw's own
+#' \eqn{X^{(0,k)}} instead.
 #'
 #' @return A list of \code{m} completed data frames (class
 #'   \code{"prism_mi_list"}), each carrying a \code{prism_diagnostics}
@@ -75,7 +85,7 @@
 #' }
 prism_mi <- function(data, fit, m = 20, initial_imputation = NULL,
                      initializer = NULL, seed = NULL,
-                     return_mids = FALSE, ...) {
+                     return_mids = FALSE, target_means = TRUE, ...) {
   if (!inherits(fit, "lavaan")) {
     stop("'fit' must be a fitted lavaan object.", call. = FALSE)
   }
@@ -181,10 +191,19 @@ prism_mi <- function(data, fit, m = 20, initial_imputation = NULL,
     colnames(sigma_i) <- ov_names
     rownames(sigma_i) <- ov_names
 
+    # Resolve the mean target for this draw from the perturbed fit
+    mu_i <- tryCatch({
+      mu <- lavaan::fitted(fit_i)$mean
+      if (is.null(mu) || length(mu) != length(ov_names)) NULL
+      else as.numeric(mu)
+    }, error = function(e) NULL)
+    mu_target <- resolve_mean_target(target_means, mu_i, ov_names)
+
     imputations[[i]] <- prism_project(
       data               = data,
       ov_names           = ov_names,
       sigma_target       = sigma_i,
+      mu_target          = mu_target,
       initial_imputation = x0_i,
       ...
     )
