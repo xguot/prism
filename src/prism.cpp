@@ -188,7 +188,9 @@ Rcpp::List constrain_covariance(const arma::mat& X_imp,
  *   mask         n x p 0/1 missingness indicator (1 = originally missing)
  *   Sigma_target p x p target covariance (projected to PSD internally)
  *   lambda_sigma dimensionless structural weight of the covariance term
- *   lr           initial step size (Armijo backtracking adapts it)
+ *   lr           dimensionless step multiplier; the initial Armijo step
+ *                is lr * n_mis, the natural scale of the normalized
+ *                objective (backtracking adapts it further)
  *   max_iter     maximum iterations
  *   tol_kkT      stationarity tolerance on the projected-gradient norm
  *   tol_cov      feasibility tolerance on ||S(X) - Sigma_target||_F
@@ -340,8 +342,14 @@ Rcpp::List constrain_covariance_v2(
         break;
       }
 
-      /* Armijo backtracking on the full objective along -Gt */
-      double eta = lr;
+      /* Armijo backtracking on the full objective along -Gt.  The
+       * normalized objective makes the gradient O(1 / n_mis) in the
+       * missing cells, so the natural initial step scales with n_mis
+       * (for the fidelity term alone, eta = n_mis is the exact line
+       * minimum).  lr is a dimensionless multiplier of that natural
+       * step; without the scaling, convergence at large n stalls far
+       * from the tolerance within a few thousand iterations. */
+      double eta = lr * n_mis;
       double g2  = r_kkT * r_kkT;
       bool accepted = false;
       arma::mat X_new, Xc_new, Sigma_new, R_new;

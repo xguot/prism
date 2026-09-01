@@ -108,9 +108,10 @@ result <- prism_fiml(df, model, initial_imputation = initial)
   column means of the initial imputation exactly; a numeric vector of
   length p supplies custom means. Columns without missing values keep
   their observed means in all modes.
-- `lr` (default 1): Initial gradient descent step size; the Armijo
-  backtracking line search adapts it automatically. With normalized losses
-  the natural step scale is O(1).
+- `lr` (default 1): Dimensionless multiplier of the natural initial step
+  size. The engine starts each Armijo line search at `lr * N_mis` (for the
+  fidelity term alone this is the exact line minimum, so the natural step
+  scales with the number of missing cells) and backtracks as needed.
 - `tol_kkT` (default 1e-4): Stationarity tolerance on the projected-gradient
   (KKT residual) norm.
 - `tol_cov` (default 1e-6): Feasibility tolerance on the covariance gap to

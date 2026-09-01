@@ -28,9 +28,10 @@
 #'   rates. Defaults to 1; a sensitivity grid of 0.25-4 is recommended. `0`
 #'   returns the initial imputation; larger values enforce the
 #'   model-implied structure more strongly.
-#' @param lr A numeric value for the initial gradient descent step size.
-#'   Because both loss terms are normalized, the natural step scale is O(1);
-#'   the Armijo backtracking line search adapts it automatically. Defaults
+#' @param lr A dimensionless multiplier of the natural initial step size.
+#'   The engine starts each Armijo line search at \code{lr * N_mis}, the
+#'   natural scale of the normalized objective (for the fidelity term alone
+#'   this is the exact line minimum), and backtracks as needed. Defaults
 #'   to 1.
 #' @param tol_kkT A numeric value for the stationarity tolerance on the
 #'   projected-gradient (KKT residual) norm. Defaults to 1e-4.
