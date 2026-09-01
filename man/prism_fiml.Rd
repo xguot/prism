@@ -13,6 +13,7 @@ prism_fiml(
   tol_kkT = 1e-04,
   tol_cov = 1e-06,
   max_iter = 2000,
+  target_means = TRUE,
   lambda = NULL,
   learning_rate = NULL,
   tol = NULL
@@ -50,6 +51,14 @@ covariance gap to the target. Defaults to 1e-6.}
 \item{max_iter}{An integer specifying the maximum number of iterations
 for the gradient descent projection. Defaults to 2000.}
 
+\item{target_means}{A logical or numeric vector controlling the mean
+target of the projection. \code{TRUE} (default) targets the FIML
+model-implied means of the observed variables, so the engine solves a
+joint mean + covariance projection consistent under MAR. \code{FALSE}
+preserves the column means of the initial imputation exactly (legacy
+behaviour). A numeric vector of length p supplies a custom mean target.
+Columns without missing values keep their observed means in all modes.}
+
 \item{lambda}{Deprecated; use \code{lambda_sigma}.}
 
 \item{learning_rate}{Deprecated; use \code{lr}.}
@@ -66,29 +75,38 @@ Fit a latent growth model via FIML, extract the model-implied
 covariance matrix, and project an initial imputation onto that structural
 target under the PRISM v2 regularized objective. Fidelity to the initial
 imputation (nonparametric, local information) is traded off against
-covariance matching (parametric structure) through \code{lambda_sigma},
-while the column means of the initial imputation are preserved exactly.
-Only originally-missing cells are modified; observed data are held fixed.
+covariance matching (parametric structure) through \code{lambda_sigma}.
+By default the completed column means target the FIML model-implied
+means (a joint mean + covariance projection); mean preservation of the
+initial imputation remains available via \code{target_means = FALSE}.
+Only originally-missing cells are modified; observed data are held fixed,
+so fully observed columns keep their observed means.
 }
 \details{
 The completed data solve the regularized constrained projection
 \deqn{\min_X \frac{1}{2N_{\text{mis}}}\|M \odot (X - X^{(0)})\|_F^2 +
 \frac{\lambda_\Sigma}{2p^2}\|\Sigma(X) - \Sigma_\text{FIML}\|_F^2}
-subject to the observed cells being fixed and the column means of
-\eqn{X^{(0)}} preserved. Both terms are normalized — fidelity per missing
-cell and covariance discrepancy per matrix entry — so
-\eqn{\lambda_\Sigma} is a dimensionless trade-off parameter. Mean
-preservation is enforced structurally: the gradient of the missing cells
-is centered at zero within each column before every step, so column sums
-of the imputed values cannot drift during optimization. Columns with a
-single missing cell are frozen by this constraint.
+subject to the observed cells being fixed and each column mean fixed to
+its target: the FIML model-implied means by default, or the column means
+of \eqn{X^{(0)}} when \code{target_means = FALSE}. Both terms are
+normalized — fidelity per missing cell and covariance discrepancy per
+matrix entry — so \eqn{\lambda_\Sigma} is a dimensionless trade-off
+parameter. Mean anchoring is enforced structurally inside the optimizer:
+the starting point is shifted onto the anchor sums and the gradient of
+the missing cells is centered at zero within each column before every
+step, so the targeted column means cannot drift during optimization. The
+returned matrix is therefore the certified constrained optimum described
+by the diagnostics below. Columns with a single missing cell are pinned
+to the value that achieves the mean target.
 
 Convergence is certified by first-order (KKT) stationarity of the
 constrained problem, not by the raw gradient norm. The
 \code{prism_diagnostics} attribute on the returned data frame reports the
 KKT residual \code{r_kkT}, the covariance feasibility gap \code{feas_gap},
-and the per-column Lagrange multiplier estimates \code{nu} of the mean
-constraints. The \code{status} field classifies the termination as
+the per-column Lagrange multiplier estimates \code{nu} of the mean
+constraints, and the mean-to-target gap \code{mean_gap} of the returned
+matrix (\code{NA} when \code{target_means = FALSE}). The \code{status}
+field classifies the termination as
 \code{"converged_feasible"} (stationary and within the covariance
 tolerance), \code{"converged"} (stationary with a nonzero covariance gap;
 the gap reflects the fidelity/structure trade-off, not target

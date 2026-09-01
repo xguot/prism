@@ -12,7 +12,8 @@ prism_sem(
   lr = 1,
   tol_kkT = 1e-04,
   tol_cov = 1e-06,
-  max_iter = 2000
+  max_iter = 2000,
+  target_means = TRUE
 )
 }
 \arguments{
@@ -50,6 +51,14 @@ covariance gap to the target. Defaults to 1e-6.}
 
 \item{max_iter}{An integer specifying the maximum number of iterations
 for the gradient descent projection. Defaults to 2000.}
+
+\item{target_means}{A logical or numeric vector controlling the mean
+target of the projection. \code{TRUE} (default) targets the FIML
+model-implied means of the observed variables, so the engine solves a
+joint mean + covariance projection consistent under MAR. \code{FALSE}
+preserves the column means of the initial imputation exactly (legacy
+behaviour). A numeric vector of length p supplies a custom mean target.
+Columns without missing values keep their observed means in all modes.}
 }
 \value{
 A data frame with the missing cells completed. Only the
@@ -60,27 +69,27 @@ attribute contains the optimization diagnostics.
 Fit a structural equation model via FIML (or reuse an already
 fitted model), extract the model-implied covariance matrix, and project
 an initial imputation onto that structural target under the PRISM v2
-regularized objective. The engine, objective, mean preservation, and KKT
+regularized objective. The engine, objective, mean anchoring, and KKT
 diagnostics are identical to \code{\link{prism_fiml}}; this entry point
 supports any single-group SEM estimated by \code{lavaan::sem()} —
 CFAs, structural regressions among latent variables, mediation models,
-and models with covariates. Only originally-missing cells are modified;
-observed data are held fixed.
+and models with covariates. By default the completed column means target
+the FIML model-implied means. Only originally-missing cells are
+modified; observed data are held fixed.
 }
 \details{
 The completed data solve the same regularized projection as
 \code{\link{prism_fiml}}: fidelity to the initial imputation is traded off
-against covariance matching through \code{lambda_sigma}, and the column
-means of the initial imputation are preserved exactly by mean-preserving
-projected gradients. Convergence is certified by the KKT diagnostics in
-the \code{prism_diagnostics} attribute (see \code{\link{prism_fiml}} for
-the field descriptions).
+against covariance matching through \code{lambda_sigma}, and each column
+mean is fixed to its target — the FIML model-implied means by default
+(\code{target_means = TRUE}) or the initial imputation's column means
+when \code{target_means = FALSE}. Convergence is certified by the KKT
+diagnostics in the \code{prism_diagnostics} attribute (see
+\code{\link{prism_fiml}} for the field descriptions).
 
 Restrictions: the model must be single-group and single-level with
 continuous observed variables. Ordinal, multi-group, and multilevel models
-are rejected with an error. As in \code{prism_fiml}, model-implied means
-are deliberately not targeted; first moments are anchored to the initial
-imputation.
+are rejected with an error.
 }
 \examples{
 \dontrun{

@@ -48,11 +48,16 @@ The pipeline has two steps:
    so `lambda_sigma` is dimensionless and comparable across sample sizes,
    variable counts, and missingness rates. The fidelity term anchors the
    solution to the nonparametric information in the initial imputation, and
-   `lambda_sigma` trades fidelity against structure. The gradient of the
-   missing cells is centered at zero within each column before every step,
-   so the column means of the initial imputation are preserved exactly — the
-   completed data cannot drift in its first moments. Columns with a single
-   missing cell are frozen by this constraint.
+   `lambda_sigma` trades fidelity against structure. The mean target is
+   enforced inside the optimizer: the starting point is shifted onto the
+   anchor sums and the gradient of the missing cells is centered at zero
+   within each column before every step, so the completed column means hit
+   their targets exactly. By default (`target_means = TRUE`) the target is
+   the FIML model-implied means — a joint mean + covariance projection;
+   `target_means = FALSE` preserves the column means of the initial
+   imputation instead, and a numeric vector supplies custom means. Columns
+   with a single missing cell are pinned to the value that achieves the
+   mean target; fully observed columns keep their observed means.
 
 ## Basic Usage
 
@@ -95,8 +100,14 @@ result <- prism_fiml(df, model, initial_imputation = initial)
   normalized (per missing cell and per covariance entry), so `lambda_sigma`
   is dimensionless and comparable across sample sizes, variable counts, and
   missingness rates; a sensitivity grid of 0.25–4 is recommended. `0`
-  returns the initial imputation unchanged; larger values enforce the FIML
-  structure more strongly.
+  returns the initial imputation unchanged (apart from the mean anchor);
+  larger values enforce the FIML structure more strongly.
+- `target_means` (default `TRUE`): Controls the mean target of the
+  projection. `TRUE` targets the FIML model-implied means (joint mean +
+  covariance projection, consistent under MAR); `FALSE` preserves the
+  column means of the initial imputation exactly; a numeric vector of
+  length p supplies custom means. Columns without missing values keep
+  their observed means in all modes.
 - `lr` (default 1): Initial gradient descent step size; the Armijo
   backtracking line search adapts it automatically. With normalized losses
   the natural step scale is O(1).
@@ -115,12 +126,14 @@ attr(result, "prism_diagnostics")
 ```
 
 It reports the KKT residual `r_kkT`, the covariance feasibility gap
-`feas_gap`, per-column Lagrange multiplier estimates `nu` of the mean
-constraints, and a `status` classifying the termination as
+`feas_gap`, the mean-to-target gap `mean_gap` of the returned matrix (`NA`
+when `target_means = FALSE`), per-column Lagrange multiplier estimates
+`nu` of the mean constraints, and a `status` classifying the termination as
 `converged_feasible` (stationary and within the covariance tolerance),
 `converged` (stationary with a nonzero covariance gap — the gap reflects
 the fidelity/structure trade-off, not target infeasibility),
-`stalled_line_search`, or `max_iter_reached`.
+`stalled_line_search`, or `max_iter_reached`. The diagnostics describe the
+matrix actually returned.
 
 ## Multiple Imputation
 
@@ -150,6 +163,7 @@ result <- prism_sem(df, model)
 ```
 
 Ordinal, multi-group, and multilevel models are rejected with clear errors;
-multi-group data can be projected group by group. Model-implied means are
-not targeted: first moments are anchored to the initial imputation, exactly
-as in `prism_fiml()`.
+multi-group data can be projected group by group. By default
+(`target_means = TRUE`) the completed column means target the FIML
+model-implied means, exactly as in `prism_fiml()`; `target_means = FALSE`
+anchors the first moments to the initial imputation.

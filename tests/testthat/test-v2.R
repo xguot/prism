@@ -42,7 +42,7 @@ time_cols <- paste0("T", 0:3)
 test_that("v2 projection preserves column means exactly", {
   df <- inject_missing(sim_lgm_complete(), c(0, 30, 40, 50))
   init <- col_mean_impute(df)
-  res <- prism_fiml(df, lgm_model(), initial_imputation = init,
+  res <- prism_fiml(df, lgm_model(), target_means = FALSE, initial_imputation = init,
                     lambda_sigma = 1, max_iter = 3000)
 
   expect_equal(colMeans(res[, time_cols]),
@@ -53,7 +53,7 @@ test_that("v2 projection preserves column means exactly", {
 test_that("observed values are frozen exactly", {
   df <- inject_missing(sim_lgm_complete(), c(0, 30, 40, 50))
   init <- col_mean_impute(df)
-  res <- prism_fiml(df, lgm_model(), initial_imputation = init,
+  res <- prism_fiml(df, lgm_model(), target_means = FALSE, initial_imputation = init,
                     lambda_sigma = 1, max_iter = 3000)
 
   df_mat  <- as.matrix(df[, time_cols])
@@ -68,9 +68,9 @@ test_that("lambda_sigma trades fidelity against structure", {
   fit <- lavaan::growth(lgm_model(), data = df, missing = "fiml")
   target <- lavaan::lavInspect(fit, "cov.ov")
 
-  res_small <- prism_fiml(df, lgm_model(), initial_imputation = init,
+  res_small <- prism_fiml(df, lgm_model(), target_means = FALSE, initial_imputation = init,
                           lambda_sigma = 0.5, max_iter = 3000)
-  res_big <- prism_fiml(df, lgm_model(), initial_imputation = init,
+  res_big <- prism_fiml(df, lgm_model(), target_means = FALSE, initial_imputation = init,
                         lambda_sigma = 10, max_iter = 3000)
 
   init_mat <- as.matrix(init[, time_cols])
@@ -86,7 +86,7 @@ test_that("lambda_sigma trades fidelity against structure", {
 test_that("lambda_sigma = 0 returns the initial imputation", {
   df <- inject_missing(sim_lgm_complete(), c(0, 30, 40, 50))
   init <- col_mean_impute(df)
-  res <- prism_fiml(df, lgm_model(), initial_imputation = init,
+  res <- prism_fiml(df, lgm_model(), target_means = FALSE, initial_imputation = init,
                     lambda_sigma = 0, max_iter = 1000)
 
   expect_equal(as.matrix(res[, time_cols]), as.matrix(init[, time_cols]),
@@ -96,7 +96,7 @@ test_that("lambda_sigma = 0 returns the initial imputation", {
 test_that("KKT diagnostics are attached and classify termination", {
   df <- inject_missing(sim_lgm_complete(), c(0, 30, 40, 50))
   init <- col_mean_impute(df)
-  res <- prism_fiml(df, lgm_model(), initial_imputation = init,
+  res <- prism_fiml(df, lgm_model(), target_means = FALSE, initial_imputation = init,
                     lambda_sigma = 1, max_iter = 3000)
 
   d <- attr(res, "prism_diagnostics")
@@ -119,7 +119,7 @@ test_that("KKT diagnostics are attached and classify termination", {
 test_that("columns with a single missing cell are frozen", {
   df <- inject_missing(sim_lgm_complete(), c(0, 1, 40, 50))
   init <- col_mean_impute(df)
-  res <- prism_fiml(df, lgm_model(), initial_imputation = init,
+  res <- prism_fiml(df, lgm_model(), target_means = FALSE, initial_imputation = init,
                     lambda_sigma = 1, max_iter = 2000)
 
   missing_t1 <- which(is.na(df$T1))
@@ -249,7 +249,7 @@ test_that("prism_mi converts to mids", {
 test_that("default lambda_sigma is 1 with normalized losses", {
   df <- inject_missing(sim_lgm_complete(100, seed = 8), c(0, 15, 20, 25))
   init <- col_mean_impute(df)
-  res <- prism_fiml(df, lgm_model(), initial_imputation = init,
+  res <- prism_fiml(df, lgm_model(), target_means = FALSE, initial_imputation = init,
                     max_iter = 3000)
   d <- attr(res, "prism_diagnostics")
   expect_equal(d$lambda_sigma, 1)
@@ -259,7 +259,7 @@ test_that("default lambda_sigma is 1 with normalized losses", {
 test_that("nonzero covariance gap at stationarity is not mislabeled", {
   df <- inject_missing(sim_lgm_complete(), c(0, 30, 40, 50))
   init <- col_mean_impute(df)
-  res <- prism_fiml(df, lgm_model(), initial_imputation = init,
+  res <- prism_fiml(df, lgm_model(), target_means = FALSE, initial_imputation = init,
                     lambda_sigma = 0.5, max_iter = 3000)
   d <- attr(res, "prism_diagnostics")
   expect_true(d$converged)
@@ -275,7 +275,7 @@ test_that("initial imputation observed cells are reset to raw data", {
   init[1, "T0"] <- init[1, "T0"] + 100   # corrupt an observed cell
 
   expect_warning(
-    res <- prism_fiml(df, lgm_model(), initial_imputation = init,
+    res <- prism_fiml(df, lgm_model(), target_means = FALSE, initial_imputation = init,
                       lambda_sigma = 1, max_iter = 1000),
     "observed values"
   )
@@ -297,11 +297,11 @@ test_that("deprecated arguments warn and map to v2 parameters", {
   init <- col_mean_impute(df)
 
   expect_warning(
-    res_old <- prism_fiml(df, lgm_model(), initial_imputation = init,
+    res_old <- prism_fiml(df, lgm_model(), target_means = FALSE, initial_imputation = init,
                           lambda = 0.5, learning_rate = 0.05, tol = 1e-3),
     "deprecated"
   )
-  res_new <- prism_fiml(df, lgm_model(), initial_imputation = init,
+  res_new <- prism_fiml(df, lgm_model(), target_means = FALSE, initial_imputation = init,
                         lambda_sigma = 0.5, lr = 0.05, tol_cov = 1e-3)
   expect_equal(res_old, res_new, tolerance = 1e-12)
 })
@@ -310,12 +310,12 @@ test_that("invalid arguments are rejected", {
   df <- inject_missing(sim_lgm_complete(100, seed = 9), c(0, 15, 20, 25))
   init <- col_mean_impute(df)
   expect_error(
-    prism_fiml(df, lgm_model(), initial_imputation = init,
+    prism_fiml(df, lgm_model(), target_means = FALSE, initial_imputation = init,
                lambda_sigma = -1),
     "non-negative"
   )
   expect_error(
-    prism_fiml(df, lgm_model(), initial_imputation = init, lr = 0),
+    prism_fiml(df, lgm_model(), target_means = FALSE, initial_imputation = init, lr = 0),
     "positive"
   )
   fit <- lavaan::growth(lgm_model(), data = df, missing = "fiml")

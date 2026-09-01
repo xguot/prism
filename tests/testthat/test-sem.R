@@ -54,7 +54,7 @@ hot_deck_sem <- function(data) {
 test_that("prism_sem completes a CFA with structural paths", {
   df <- inject_missing_sem(sim_sem_complete(), c(40, 45, 50, 42, 38, 44))
   init <- col_mean_impute_sem(df)
-  res <- prism_sem(df, sem_model(), initial_imputation = init,
+  res <- prism_sem(df, sem_model(), target_means = FALSE, initial_imputation = init,
                    lambda_sigma = 5, max_iter = 3000)
 
   expect_false(anyNA(res))
@@ -80,9 +80,9 @@ test_that("prism_sem accepts a pre-fitted lavaan object", {
   init <- col_mean_impute_sem(df)
   fit <- lavaan::sem(sem_model(), data = df, missing = "fiml")
 
-  res_fit <- prism_sem(df, fit, initial_imputation = init,
+  res_fit <- prism_sem(df, fit, target_means = FALSE, initial_imputation = init,
                        lambda_sigma = 5, max_iter = 3000)
-  res_syn <- prism_sem(df, sem_model(), initial_imputation = init,
+  res_syn <- prism_sem(df, sem_model(), target_means = FALSE, initial_imputation = init,
                        lambda_sigma = 5, max_iter = 3000)
   expect_equal(res_fit, res_syn, tolerance = 1e-12)
 })
