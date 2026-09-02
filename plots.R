@@ -104,12 +104,17 @@ for (model_i in c("GCM", "SEM")) {
   cat(sprintf("Plotting model %s -> %s/\n", model_i, fig_dir))
   d <- prod %>% filter(model == model_i)
 
+  # Aggregated summaries use the median and MAD (SD-consistent), matching
+  # the robust pooling in analysis.R: a few degenerate fits in the
+  # heavy-tail cells otherwise dominate mean-based curves by orders of
+  # magnitude.  Rates (coverage, convergence) keep their mean definition.
+
   # Aggregate Frobenius
   frob_agg <- d %>%
     filter(is.finite(f_dist), method %in% keep_methods) %>%
     group_by(N, N_label, miss, dist, mech, method) %>%
-    summarise(frob_mean = mean(f_dist, na.rm = TRUE),
-              frob_sd   = sd(f_dist, na.rm = TRUE), .groups = "drop")
+    summarise(frob_med = stats::median(f_dist, na.rm = TRUE),
+              frob_mad = stats::mad(f_dist, na.rm = TRUE), .groups = "drop")
 
   # Per-parameter bias long table
   bias_agg <- do.call(rbind, lapply(param_names, function(pn) {
@@ -121,8 +126,8 @@ for (model_i in c("GCM", "SEM")) {
       select(N, N_label, miss, dist, mech, method, param, rel_bias)
   })) %>%
     group_by(N, N_label, miss, dist, mech, method, param) %>%
-    summarise(arb_mean = mean(abs(rel_bias), na.rm = TRUE),
-              arb_sd   = sd(abs(rel_bias), na.rm = TRUE), .groups = "drop")
+    summarise(arb_med = stats::median(abs(rel_bias), na.rm = TRUE),
+              arb_mad = stats::mad(abs(rel_bias), na.rm = TRUE), .groups = "drop")
 
   # Aggregate SE ratio
   se_ratio_agg <- do.call(rbind, lapply(param_names, function(pn) {
@@ -132,9 +137,9 @@ for (model_i in c("GCM", "SEM")) {
       filter(is.finite(.data[[sc]]), method %in% keep_methods) %>%
       group_by(N, N_label, miss, dist, mech, method) %>%
       summarise(
-        empirical_se = sd(.data[[ec]], na.rm = TRUE),
-        avg_model_se = mean(.data[[sc]], na.rm = TRUE),
-        se_ratio     = avg_model_se / empirical_se,
+        empirical_mad  = stats::mad(.data[[ec]], na.rm = TRUE),
+        median_model_se = stats::median(.data[[sc]], na.rm = TRUE),
+        se_ratio       = median_model_se / empirical_mad,
         .groups = "drop"
       ) %>%
       mutate(param = pn)
@@ -150,8 +155,8 @@ for (model_i in c("GCM", "SEM")) {
   timing_agg <- d %>%
     filter(method %in% keep_methods, is.finite(time_sec)) %>%
     group_by(method) %>%
-    summarise(mean_time = mean(time_sec, na.rm = TRUE),
-              sd_time   = sd(time_sec, na.rm = TRUE), .groups = "drop")
+    summarise(median_time = stats::median(time_sec, na.rm = TRUE),
+              mad_time    = stats::mad(time_sec, na.rm = TRUE), .groups = "drop")
 
   # Aggregate coverage (approx: est +/- 1.96 * se)
   cov_agg <- do.call(rbind, lapply(param_names, function(pn) {
@@ -169,14 +174,15 @@ for (model_i in c("GCM", "SEM")) {
       mutate(param = pn)
   }))
 
-  # Aggregate MSE (bias^2 + empirical variance)
+  # Aggregate MSE (bias^2 + empirical variance, robustly)
   mse_agg <- do.call(rbind, lapply(param_names, function(pn) {
     tv <- beta_true[pn]; ec <- est_cols[pn]
     d %>%
       filter(is.finite(.data[[ec]]), method %in% keep_methods) %>%
       group_by(N, N_label, miss, dist, mech, method) %>%
       summarise(
-        mse = (mean(.data[[ec]], na.rm = TRUE) - tv)^2 + var(.data[[ec]], na.rm = TRUE),
+        mse = (stats::median(.data[[ec]], na.rm = TRUE) - tv)^2 +
+              stats::mad(.data[[ec]], na.rm = TRUE)^2,
         .groups = "drop"
       ) %>%
       mutate(param = pn)
@@ -184,7 +190,7 @@ for (model_i in c("GCM", "SEM")) {
 
   # FIGURE 1 — Frobenius MAR
   p <- frob_agg %>% filter(mech == "MAR") %>%
-    ggplot(aes(x = miss, y = frob_mean, group = method)) +
+    ggplot(aes(x = miss, y = frob_med, group = method)) +
     geom_line(aes(color = method), linewidth = 0.5) +
     geom_point(aes(color = method, shape = method), size = 1.0) +
     scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
@@ -197,7 +203,7 @@ for (model_i in c("GCM", "SEM")) {
 
   # FIGURE 2 — Frobenius MNAR
   p <- frob_agg %>% filter(mech == "MNAR") %>%
-    ggplot(aes(x = miss, y = frob_mean, group = method)) +
+    ggplot(aes(x = miss, y = frob_med, group = method)) +
     geom_line(aes(color = method), linewidth = 0.5) +
     geom_point(aes(color = method, shape = method), size = 1.0) +
     scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
@@ -219,7 +225,7 @@ for (model_i in c("GCM", "SEM")) {
         geom_hline(yintercept = 10, linetype = "dashed", color = "grey50", linewidth = 0.4)
 
       fig <- bias_agg %>% filter(mech == mech_i, param == pn)
-      p <- ggplot(fig, aes(x = miss, y = arb_mean, group = method)) +
+      p <- ggplot(fig, aes(x = miss, y = arb_med, group = method)) +
         hline +
         geom_line(aes(color = method), linewidth = 0.5) +
         geom_point(aes(color = method, shape = method), size = 1.0) +
@@ -249,36 +255,36 @@ for (model_i in c("GCM", "SEM")) {
           scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
           scale_method_aes +
           facet_grid(dist ~ N_label, scales = "free_y") +
-          labs(x = "Missingness Rate", y = "SE Ratio (Model SE / Empirical SE)",
+          labs(x = "Missingness Rate", y = "SE Ratio (Median Model SE / Empirical MAD)",
                title = paste0("SE Ratio: ", param_labels[pn], " (", mech_i, ")")) +
           theme_mda()
         ggsave(file.path(fig_dir, sprintf("se_ratio_%s_%s.pdf", tolower(mech_i), param_files[pn])), p,
                width = 30, height = 20, units = "cm")
 
-        # Empirical SE
-        p <- ggplot(fig, aes(x = miss, y = empirical_se, group = method)) +
+        # Empirical MAD
+        p <- ggplot(fig, aes(x = miss, y = empirical_mad, group = method)) +
           geom_line(aes(color = method), linewidth = 0.5) +
           geom_point(aes(color = method, shape = method), size = 1.0) +
           scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
           scale_y_log10() +
           scale_method_aes +
           facet_grid(dist ~ N_label, scales = "free_y") +
-          labs(x = "Missingness Rate", y = "Empirical SE (log10)",
-               title = paste0("Empirical SE: ", param_labels[pn], " (", mech_i, ")")) +
+          labs(x = "Missingness Rate", y = "Empirical MAD (log10)",
+               title = paste0("Empirical MAD: ", param_labels[pn], " (", mech_i, ")")) +
           theme_mda()
         ggsave(file.path(fig_dir, sprintf("empirical_se_%s_%s.pdf", tolower(mech_i), param_files[pn])), p,
                width = 30, height = 20, units = "cm")
 
-        # Average Model SE
-        p <- ggplot(fig, aes(x = miss, y = avg_model_se, group = method)) +
+        # Median Model SE
+        p <- ggplot(fig, aes(x = miss, y = median_model_se, group = method)) +
           geom_line(aes(color = method), linewidth = 0.5) +
           geom_point(aes(color = method, shape = method), size = 1.0) +
           scale_x_continuous(breaks = miss_breaks, labels = miss_labels) +
           scale_y_log10() +
           scale_method_aes +
           facet_grid(dist ~ N_label, scales = "free_y") +
-          labs(x = "Missingness Rate", y = "Average Model SE (log10)",
-               title = paste0("Average Model SE: ", param_labels[pn], " (", mech_i, ")")) +
+          labs(x = "Missingness Rate", y = "Median Model SE (log10)",
+               title = paste0("Median Model SE: ", param_labels[pn], " (", mech_i, ")")) +
           theme_mda()
         ggsave(file.path(fig_dir, sprintf("model_se_%s_%s.pdf", tolower(mech_i), param_files[pn])), p,
                width = 30, height = 20, units = "cm")
@@ -307,14 +313,14 @@ for (model_i in c("GCM", "SEM")) {
 
   # Timing comparison (bar)
   p <- timing_agg %>%
-    ggplot(aes(x = method, y = mean_time, fill = method)) +
+    ggplot(aes(x = method, y = median_time, fill = method)) +
     geom_col(width = 0.7) +
-    geom_errorbar(aes(ymin = pmax(mean_time - sd_time, 1e-3),
-                      ymax = mean_time + sd_time),
+    geom_errorbar(aes(ymin = pmax(median_time - mad_time, 1e-3),
+                      ymax = median_time + mad_time),
                   width = 0.2, linewidth = 0.3) +
     scale_y_log10() +
     scale_fill_manual(values = method_colors) +
-    labs(x = NULL, y = "Mean Runtime (seconds, log10)",
+    labs(x = NULL, y = "Median Runtime (seconds, log10)",
          title = "Computational Cost by Method") +
     theme_mda(legend_pos = "none")
   ggsave(file.path(fig_dir, "timing_comparison.pdf"), p, width = 20, height = 12, units = "cm")
