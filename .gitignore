@@ -17,4 +17,9 @@ simulation.log
 manuscript/build/
 *.aux
 *.log
+*.nav
+*.out
+*.snm
+*.toc
+*.vrb
 libs/
