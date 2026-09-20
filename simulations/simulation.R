@@ -32,12 +32,12 @@ set.seed(if (is.na(array_id)) seed_base else seed_base + array_id)
 #   N       — 100, 200, 500, 1000, 5000, 10000
 #   miss    — 5%, 10%, 15%, 30%
 #   dist    — Normal, t(5), Outlier, Lognormal
-#   mech    — MAR, MNAR
+#   mech    — MAR, MCAR
 grid_model <- c("GCM", "SEM")
 grid_n    <- c(100, 200, 500, 1000, 5000, 10000)
 grid_miss <- c(0.05, 0.10, 0.15, 0.30)
 grid_dist <- c("Normal", "t5", "Outlier", "Lognormal")
-grid_mech <- c("MAR", "MNAR")
+grid_mech <- c("MAR", "MCAR")
 n_sims    <- 500
 t_points  <- 4
 
@@ -201,7 +201,7 @@ generate_sem_data <- function(n, dist) {
 
 # ── Missingness Engines ───────────────────────────────────────────────────────
 # GCM convention (Tang & Tong 2025): dropout at T_{t+1} driven by low T_t
-# under MAR; latent-slope-driven dropout under MNAR.
+# under MAR; independent random deletion (pp1.R convention) under MCAR.
 apply_missingness <- function(df, rate, mech) {
   df_miss <- df; n <- nrow(df)
 
@@ -232,14 +232,14 @@ apply_missingness <- function(df, rate, mech) {
         df_miss[drop_idx, (t + 1):t_points] <- NA # Dropout: once missing, stay missing
       }
     }
-  } else if (mech == "MNAR") {
-    # Latent-slope-dependent dropout (Tang & Tong convention)
-    cor_ab <- 0.8; a <- cor_ab / sqrt(1 - cor_ab^2)
-    aux_var <- a * df$true_slope + rnorm(n, 0, 1)
-    miss_rate_t <- 2 * rate / (t_points - 1)
+  } else if (mech == "MCAR") {
+    # Independent random deletion (pp1.R convention): the first wave stays
+    # fully observed; each remaining cell is deleted independently with
+    # probability T*rate/(T-1) so the realized cellwise rate equals the
+    # nominal `rate`.
+    p_miss <- rate * t_points / (t_points - 1)
     for (j in 2:t_points) {
-      crit <- qnorm((1 - (j - 1) * miss_rate_t), mean = a * mu_s, sd = sqrt(a^2 + 1))
-      df_miss[which(aux_var > crit), j] <- NA
+      df_miss[runif(n) < p_miss, j] <- NA
     }
   }
 
@@ -250,7 +250,7 @@ apply_missingness <- function(df, rate, mech) {
 
 # SEM conventions: `rate` is the per-variable missingness fraction.
 #   MAR  — chain mechanism: low values of y_{j-1} drive missingness in y_j
-#   MNAR — self-missingness: the lowest values of y_j are missing in y_j
+#   MCAR — independent random deletion (pp1.R convention)
 apply_missingness_sem <- function(df, rate, mech) {
   df_miss <- df; n <- nrow(df); p <- ncol(df)
 
@@ -263,13 +263,14 @@ apply_missingness_sem <- function(df, rate, mech) {
       drop_idx  <- tail(order_idx, n_miss_j)
       df_miss[drop_idx, j] <- NA
     }
-  } else if (mech == "MNAR") {
-    for (j in 1:p) {
-      obs_idx <- which(!is.na(df_miss[, j]))
-      order_idx <- obs_idx[order(df_miss[obs_idx, j], decreasing = TRUE)]
-      n_miss_j  <- round(length(obs_idx) * rate)
-      drop_idx  <- tail(order_idx, n_miss_j)
-      df_miss[drop_idx, j] <- NA
+  } else if (mech == "MCAR") {
+    # Independent random deletion (pp1.R convention): the first variable
+    # stays fully observed; each remaining cell is deleted independently
+    # with probability rate*p/(p-1) so the realized cellwise rate equals
+    # the nominal `rate`.
+    p_miss <- rate * p / (p - 1)
+    for (j in 2:p) {
+      df_miss[runif(n) < p_miss, j] <- NA
     }
   }
 
