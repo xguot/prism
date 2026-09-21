@@ -2,6 +2,7 @@
 
 export(prism_fiml)
 export(prism_mi)
+export(prism_sem)
 export(stochastic_fiml_impute)
 importFrom(Rcpp,sourceCpp)
 useDynLib(prism, .registration = TRUE)

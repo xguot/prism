@@ -1,0 +1,172 @@
+% Created 2026-09-12 Sat 20:49
+% Intended LaTeX compiler: lualatex
+\documentclass[presentation, aspectratio=169]{beamer}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{wrapfig}
+\usepackage{rotating}
+\usepackage[normalem]{ulem}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{capt-of}
+\usepackage{hyperref}
+\usepackage{fontspec}
+\setmainfont{TeX Gyre Pagella}
+\setsansfont{TeX Gyre Heros}
+\setmonofont{TeX Gyre Cursor}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{unicode-math}
+\setmathfont{TeX Gyre Pagella Math}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning}
+\usetheme{metropolis}
+\author{Xiyuan Guo}
+\date{\today}
+\title{prism}
+\subtitle{FIML Covariance Projection for Longitudinal Missing Data}
+\addtobeamertemplate{title page}{\vspace*{-16pt}}{}
+\hypersetup{
+ pdfauthor={Xiyuan Guo},
+ pdftitle={prism},
+ pdfkeywords={},
+ pdfsubject={},
+ pdfcreator={Emacs 29.4 (Org mode 9.6.15)}, 
+ pdflang={English}}
+\begin{document}
+
+\maketitle
+
+\begin{frame}[label={sec:orgfd7a113}]{What we are doing}
+\begin{itemize}
+\item Quant psych: repeated measurements per person over time —
+longitudinal data
+\item Missing data is the norm: dropout, skipped waves
+\item Most analyses need a completed dataset
+\item prism: complete the data so its structure matches the model
+\end{itemize}
+\end{frame}
+
+\begin{frame}[label={sec:orge6bf122},fragile]{FIML estimates — but returns no dataset}
+ \begin{itemize}
+\item FIML fits the model under MAR — but returns no completed dataset
+\item \alert{Unconstrained imputation is not desirable:} \texttt{lavPredict} shrinks
+variance 40–60\%, \texttt{MICE} and \texttt{missForest} drift the covariance — it
+needs a constraint
+\end{itemize}
+\end{frame}
+
+\begin{frame}[label={sec:org3570a17}]{The idea — project onto the FIML structure}
+\begin{itemize}
+\item FIML gives the target \((\hat{\mu}, \hat{\Sigma})\)
+\item prism moves the imputed scatter onto that target — observed cells
+untouched
+\end{itemize}
+
+\begin{center}
+\begin{tikzpicture}[scale=0.7,
+  arr/.style={-{Stealth[length=2mm]}, thick, mLightBrown}
+]
+  \draw[mDarkTeal, very thick] (0,0) ellipse (2.2 and 1.4);
+  \draw[mLightBrown, thick, dashed] (0,0) ellipse (1.0 and 0.65);
+  \foreach \t in {25,110,215,320} {
+    \draw[arr] ({1.0*cos(\t)}, {0.65*sin(\t)}) -- ({2.2*cos(\t)}, {1.4*sin(\t)});
+  }
+  \foreach \t in {25,110,215,320} {
+    \node[fill=mLightBrown, circle, inner sep=1.4pt] at ({1.0*cos(\t)}, {0.65*sin(\t)}) {};
+    \node[fill=mLightBrown, circle, inner sep=1.4pt] at ({2.2*cos(\t)}, {1.4*sin(\t)}) {};
+  }
+  \node[fill=mDarkTeal, circle, inner sep=1.4pt] at ({2.2*cos(70)}, {1.4*sin(70)}) {};
+  \node[fill=mDarkTeal, circle, inner sep=1.4pt] at ({2.2*cos(165)}, {1.4*sin(165)}) {};
+\end{tikzpicture}
+\end{center}
+\end{frame}
+
+\begin{frame}[label={sec:org5bb0403},fragile]{What prism takes in}
+ \begin{itemize}
+\item \alert{In:} incomplete data + \texttt{lavaan} model + initial imputation \(X^{(0)}\)
+(e.g. \texttt{missForest})
+\item \alert{Out:} completed data matching the FIML target — only missing cells move
+\item \alert{Fallback:} no initial imputation? column means are used — worse
+values, same structure
+\end{itemize}
+
+\begin{center}
+\begin{tikzpicture}[
+  box/.style={draw, rounded corners=2pt, minimum height=0.95cm,
+              minimum width=3.2cm, align=center, font=\small},
+  arr/.style={-{Stealth[length=2.5mm]}, thick, mDarkTeal}
+]
+  \node[box] (data) {incomplete\\ data};
+  \node[box, right=0.9cm of data] (fit)  {\texttt{lavaan} FIML fit};
+  \node[box, right=0.9cm of fit]  (targ) {target\\ $(\hat{\mu},\hat{\Sigma})$};
+  \node[box, below=1.0cm of data] (init) {initial imputation\\ $X^{(0)}$ (missForest)};
+  \node[box, below=1.0cm of fit]  (proj) {projection\\ (missing cells only)};
+  \node[box, below=1.0cm of targ] (out)  {completed data\\ + diagnostics};
+  \draw[arr] (data) -- (fit);
+  \draw[arr] (fit)  -- (targ);
+  \draw[arr] (data) -- (init);
+  \draw[arr] (init) -- (proj);
+  \draw[arr] (proj) -- (out);
+  \draw[arr] (targ) -- (proj);
+\end{tikzpicture}
+\end{center}
+\end{frame}
+
+\begin{frame}[label={sec:orgca32b56}]{The objective — one equation, two forces}
+\begin{itemize}
+\item Move only the missing cells to minimize
+
+$$ f(X) = \frac{1}{2N_{\mathrm{mis}}} \lVert M \odot (X - X^{(0)}) \rVert_{F}^{2} + \frac{\lambda_{\Sigma}}{2p^{2}} \lVert \operatorname{Cov}(X) - \Sigma_{\mathrm{FIML}} \rVert_{F}^{2} $$
+
+\item \alert{First term} — stay close to the initial imputation
+\item \alert{Second term} — pull the covariance to the FIML target
+\item \(\lambda_{\Sigma}\) balances the two
+\end{itemize}
+\end{frame}
+
+\begin{frame}[label={sec:orgb195e49},fragile]{Usage}
+ \begin{verbatim}
+library(prism)
+
+model <- "
+  i =~ 1*T1 + 1*T2 + 1*T3 + 1*T4
+  s =~ 0*T1 + 1*T2 + 2*T3 + 3*T4"
+
+imp <- prism_fiml(data = df, model = model,
+                  lambda_sigma = 0.5)
+attr(imp, "prism_diagnostics")   # convergence evidence
+\end{verbatim}
+\end{frame}
+
+\begin{frame}[label={sec:orgee64611},fragile]{Results}
+ \begin{itemize}
+\item GCM + SEM; \(N\) 100–5000; 5–30\% missing; MAR/MNAR — distance to the
+true covariance
+\item GCM, Normal, MAR: FIML 1.35 · \texttt{lavPredict} 4.68 · prism 6.66 ·
+\texttt{MICE} 6.70 · \texttt{missForest} 6.74
+\item GCM, Normal, MNAR: FIML 3.48 · prism 4.00 · \texttt{missForest} 4.08 ·
+\texttt{MICE} 4.40 · \texttt{lavPredict} 7.18
+\item SEM, Normal: FIML 0.30 · \texttt{MICE} 0.44 · prism 0.61 · \texttt{missForest} 0.62 ·
+\texttt{lavPredict} 1.45 — prism beats its starting imputation in every
+setting
+\end{itemize}
+\end{frame}
+
+\begin{frame}[label={sec:org49f0d67},fragile]{Multiple imputation — and the honest caveat}
+ \begin{itemize}
+\item \texttt{prism\_mi}: proper multiple imputation — fresh initializations +
+parameter draws
+\item prism completes data for everything FIML cannot feed; refitting on
+prism data beats the initial imputation — still short of FIML
+\end{itemize}
+\end{frame}
+
+\begin{frame}[label={sec:org563be16},fragile]{Take-aways}
+ \begin{itemize}
+\item prism projects an initial imputation onto the FIML-implied
+\((\mu, \Sigma)\) — best completed-data covariance recovery in the grid
+\item R package, MIT: \texttt{install\_github("xguot/prism")}
+\end{itemize}
+\end{frame}
+\end{document}

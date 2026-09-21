@@ -1,26 +1,85 @@
-#' @title FIML Covariance Projection
+#' @title FIML Covariance Projection (PRISM v2)
 #'
 #' @description Fit a latent growth model via FIML, extract the model-implied
 #'   covariance matrix, and project an initial imputation onto that structural
-#'   manifold using Lagrangian-constrained gradient descent. Only
-#'   originally-missing cells are modified; observed data is held fixed.
+#'   target under the PRISM v2 regularized objective. Fidelity to the initial
+#'   imputation (nonparametric, local information) is traded off against
+#'   covariance matching (parametric structure) through \code{lambda_sigma}.
+#'   By default the completed column means target the FIML model-implied
+#'   means (a joint mean + covariance projection); mean preservation of the
+#'   initial imputation remains available via \code{target_means = FALSE}.
+#'   Only originally-missing cells are modified; observed data are held fixed,
+#'   so fully observed columns keep their observed means.
 #'
 #' @param data A data frame containing missing values.
 #' @param model A lavaan model syntax string (e.g. a growth model).
 #' @param initial_imputation A data frame or matrix of the same dimensions as
 #'   the longitudinal subset of `data`, containing initial imputed values.
 #'   If `NULL` (default), column-mean imputation is used as a fallback.
-#' @param lambda A numeric value specifying the per-observation penalty weight
-#'   for covariance matching. Defaults to 1.0.
-#' @param learning_rate A numeric value for the gradient descent step size.
-#'   Defaults to 0.001.
-#' @param tol A numeric value for the convergence tolerance (Frobenius norm).
-#'   Defaults to 1e-6.
+#' @param lambda_sigma A non-negative numeric value giving the structural
+#'   weight of the covariance-matching term relative to the fidelity term.
+#'   Both loss terms are normalized (fidelity per missing cell, covariance
+#'   discrepancy per matrix entry), so \code{lambda_sigma} is dimensionless
+#'   and comparable across sample sizes, variable counts, and missingness
+#'   rates. Defaults to 1; a sensitivity grid of 0.25-4 is recommended. `0`
+#'   returns the initial imputation; larger values enforce the FIML-implied
+#'   structure more strongly.
+#' @param lr A dimensionless multiplier of the natural initial step size.
+#'   The engine starts each Armijo line search at \code{lr * N_mis}, the
+#'   natural scale of the normalized objective (for the fidelity term alone
+#'   this is the exact line minimum), and backtracks as needed. Defaults
+#'   to 1.
+#' @param tol_kkT A numeric value for the stationarity tolerance on the
+#'   projected-gradient (KKT residual) norm. Defaults to 1e-4.
+#' @param tol_cov A numeric value for the feasibility tolerance on the
+#'   covariance gap to the target. Defaults to 1e-6.
 #' @param max_iter An integer specifying the maximum number of iterations
 #'   for the gradient descent projection. Defaults to 2000.
+#' @param target_means A logical or numeric vector controlling the mean
+#'   target of the projection. `TRUE` (default) targets the FIML
+#'   model-implied means of the observed variables, so the engine solves a
+#'   joint mean + covariance projection consistent under MAR. `FALSE`
+#'   preserves the column means of the initial imputation exactly (legacy
+#'   behaviour). A numeric vector of length p supplies a custom mean target.
+#'   Columns without missing values keep their observed means in all modes.
+#' @param lambda Deprecated; use `lambda_sigma`.
+#' @param learning_rate Deprecated; use `lr`.
+#' @param tol Deprecated; use `tol_cov`.
+#'
+#' @details
+#' The completed data solve the regularized constrained projection
+#' \deqn{\min_X \frac{1}{2N_{\text{mis}}}\|M \odot (X - X^{(0)})\|_F^2 +
+#' \frac{\lambda_\Sigma}{2p^2}\|\Sigma(X) - \Sigma_\text{FIML}\|_F^2}
+#' subject to the observed cells being fixed and each column mean fixed to
+#' its target: the FIML model-implied means by default, or the column means
+#' of \eqn{X^{(0)}} when \code{target_means = FALSE}. Both terms are
+#' normalized — fidelity per missing cell and covariance discrepancy per
+#' matrix entry — so \eqn{\lambda_\Sigma} is a dimensionless trade-off
+#' parameter. Mean anchoring is enforced structurally inside the optimizer:
+#' the starting point is shifted onto the anchor sums and the gradient of
+#' the missing cells is centered at zero within each column before every
+#' step, so the targeted column means cannot drift during optimization. The
+#' returned matrix is therefore the certified constrained optimum described
+#' by the diagnostics below. Columns with a single missing cell are pinned
+#' to the value that achieves the mean target.
+#'
+#' Convergence is certified by first-order (KKT) stationarity of the
+#' constrained problem, not by the raw gradient norm. The
+#' \code{prism_diagnostics} attribute on the returned data frame reports the
+#' KKT residual \code{r_kkT}, the covariance feasibility gap \code{feas_gap},
+#' the per-column Lagrange multiplier estimates \code{nu} of the mean
+#' constraints, and the mean-to-target gap \code{mean_gap} of the returned
+#' matrix (\code{NA} when \code{target_means = FALSE}). The \code{status}
+#' field classifies the termination as
+#' \code{"converged_feasible"} (stationary and within the covariance
+#' tolerance), \code{"converged"} (stationary with a nonzero covariance gap;
+#' the gap reflects the fidelity/structure trade-off, not target
+#' infeasibility), or a non-stationary stop (\code{"stalled_line_search"} or
+#' \code{"max_iter_reached"}).
 #'
 #' @return A data frame with FIML-consistent, covariance-projected imputed
-#'   values. Only the originally-missing cells are modified.
+#'   values. Only the originally-missing cells are modified. The
+#'   \code{prism_diagnostics} attribute contains the optimization diagnostics.
 #' @export
 #'
 #' @examples
@@ -33,45 +92,94 @@
 #'   T2 = c(2.1, 2.5, NA, 4.0),
 #'   T3 = c(3.0, 3.3, 4.1, NA)
 #' )
-#' prism_fiml(df, model)
+#' result <- prism_fiml(df, model)
+#' attr(result, "prism_diagnostics")
 #' }
 prism_fiml <- function(data, model, initial_imputation = NULL,
-                         lambda = 1.0, learning_rate = 0.001,
-                         tol = 1e-6, max_iter = 2000) {
+                       lambda_sigma = NULL, lr = 1,
+                       tol_kkT = 1e-4, tol_cov = 1e-6,
+                       max_iter = 2000,
+                       target_means = TRUE,
+                       lambda = NULL, learning_rate = NULL, tol = NULL) {
+
+  # backward-compatible mapping of deprecated arguments
+  if (!is.null(lambda)) {
+    warning("Argument 'lambda' is deprecated; use 'lambda_sigma'.",
+            call. = FALSE)
+    lambda_sigma <- lambda
+  }
+  if (!is.null(learning_rate)) {
+    warning("Argument 'learning_rate' is deprecated; use 'lr'.",
+            call. = FALSE)
+    lr <- learning_rate
+  }
+  if (!is.null(tol)) {
+    warning("Argument 'tol' is deprecated; use 'tol_cov'.", call. = FALSE)
+    tol_cov <- tol
+  }
+
   if (!requireNamespace("lavaan", quietly = TRUE)) {
     stop("Package 'lavaan' is required. ",
          "Please install it with install.packages('lavaan').",
          call. = FALSE)
   }
 
+  # Pre-flight validation of the model columns, before lavaan is invoked,
+  # so that degenerate inputs fail with clear, deterministic messages
+  model_cols <- validate_model_columns(data, model)
+
   # Fit growth model with FIML
   fit <- tryCatch(
     lavaan::growth(model, data = data, missing = "fiml"),
     error = function(e) {
-      stop("lavaan FIML estimation failed: ", e$message, call. = FALSE)
+      stop("lavaan FIML estimation failed: ", conditionMessage(e),
+           call. = FALSE)
     }
   )
 
-  # Extract model-implied covariance as the structural target
-  sigma_target <- tryCatch(
-    lavaan::lavInspect(fit, "cov.ov"),
-    error = function(e) {
-      stop("Failed to extract model-implied covariance from lavaan fit: ",
-           e$message, call. = FALSE)
-    }
-  )
-
-  time_cols <- colnames(sigma_target)
-
-  # Delegate to the internal projection engine
-  prism_project(
+  # Extract the model-implied covariance and run the shared projection engine
+  prism_from_fit(
     data               = data,
-    time_cols          = time_cols,
-    sigma_target       = sigma_target,
+    fit                = fit,
     initial_imputation = initial_imputation,
-    lambda             = lambda,
-    learning_rate      = learning_rate,
-    tol                = tol,
-    max_iter           = max_iter
+    lambda_sigma       = lambda_sigma,
+    lr                 = lr,
+    tol_kkT            = tol_kkT,
+    tol_cov            = tol_cov,
+    max_iter           = max_iter,
+    target_means       = target_means
   )
+}
+
+
+# Pre-flight validation of the observed variables referenced by the model.
+#
+# Fail fast with deterministic, user-readable errors before lavaan sees the
+# data: non-numeric columns, 100%-missing columns, and columns absent from
+# the data are all caught here.  Latent variables are not data columns and
+# are skipped.
+#' @keywords internal
+validate_model_columns <- function(data, model) {
+  pt <- lavaan::lavParseModelString(model)
+  model_vars <- unique(c(pt$lhs, pt$rhs))
+  model_vars <- model_vars[nzchar(model_vars) & model_vars != "1"]
+  ov <- model_vars[model_vars %in% names(data)]
+  if (length(ov) == 0) {
+    stop("No observed model variables found in data.", call. = FALSE)
+  }
+
+  non_num <- ov[!vapply(data[, ov, drop = FALSE], is.numeric, logical(1))]
+  if (length(non_num) > 0) {
+    stop("All model columns must be strictly numeric. Non-numeric column(s): ",
+         paste(non_num, collapse = ", "), ".", call. = FALSE)
+  }
+
+  na_frac <- colSums(is.na(data[, ov, drop = FALSE])) / nrow(data)
+  if (any(na_frac == 1)) {
+    stop("Column(s) ", paste(names(which(na_frac == 1)), collapse = ", "),
+         " are 100% missing; target covariance cannot be estimated.",
+         call. = FALSE)
+  }
+
+  ov
 }
